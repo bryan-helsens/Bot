@@ -1,0 +1,49 @@
+# Active strategy configuration.
+# Copy to config/strategies.yaml and adjust. Each entry instantiates a registered
+# strategy (by its `class` name). Multiple strategies can run concurrently; the
+# SignalAggregator only acts when enough of them agree (confluence).
+
+strategies:
+  - name: ema_btc_1h
+    class: EMACrossoverStrategy
+    market: spot
+    enabled: true
+    symbols: [BTCUSDT]
+    timeframes: [1h]
+    params:
+      fast_period: 12
+      slow_period: 26
+
+  - name: rsi_btc_15m
+    class: RSIStrategy
+    market: spot
+    enabled: true
+    symbols: [BTCUSDT]
+    timeframes: [15m]
+    params:
+      period: 14
+      oversold: 30
+      overbought: 70
+
+  - name: macd_eth_1h
+    class: MACDStrategy
+    market: spot
+    enabled: true
+    symbols: [ETHUSDT]
+    timeframes: [1h]
+    params:
+      fast_period: 12
+      slow_period: 26
+      signal_period: 9
+      zero_line_filter: true
+
+  - name: breakout_sol_4h
+    class: BreakoutStrategy
+    market: spot
+    enabled: false
+    symbols: [SOLUSDT]
+    timeframes: [4h]
+    params:
+      channel: 20
+      volume_filter: true
+      volume_multiple: 1.5

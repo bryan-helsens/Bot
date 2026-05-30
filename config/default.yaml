@@ -1,0 +1,39 @@
+# Default strategy/risk parameter presets (reference values).
+# These document sensible defaults; the authoritative runtime configuration is
+# the environment (.env). Use this file as a tuning reference.
+
+risk:
+  sizing_method: risk          # fixed | risk | kelly | volatility
+  risk_per_trade: 0.01         # 1% of equity at risk per trade
+  kelly_cap: 0.25
+  default_stop_loss_pct: 0.02
+  default_take_profit_pct: 0.04
+  trailing_stop_pct: 0.015
+  break_even_trigger_pct: 0.01
+  take_profit_levels:          # price_fraction : size_fraction
+    - [0.02, 0.5]
+    - [0.04, 0.3]
+    - [0.06, 0.2]
+  max_open_trades: 5
+  max_exposure_per_coin: 0.20
+  max_portfolio_exposure: 0.60
+  max_daily_loss: 0.05
+  max_weekly_loss: 0.10
+  max_drawdown: 0.20
+  max_correlation: 0.80
+  circuit_breaker_losses: 4
+  circuit_breaker_cooldown: 3600
+  allow_martingale: false
+  allow_unlimited_averaging: false
+  max_averaging_entries: 3
+
+aggregator:
+  min_consensus: 2             # require >= 2 agreeing strategies
+  min_strength: 0.5
+  window_seconds: 60
+
+backtest:
+  initial_capital: 10000
+  commission: 0.001
+  slippage: 0.0005
+  spread: 0.0002
