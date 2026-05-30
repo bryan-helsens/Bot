@@ -13,7 +13,7 @@ gevonden en verholpen.
 | Categorie | Resultaat |
 |-----------|-----------|
 | Bron compileert (`compileall`) | ✅ 107 modules |
-| Pytest-suite | ✅ **72 passed** (0 failed) |
+| Pytest-suite | ✅ **71 passed** (0 failed) |
 | CLI (8 commands) | ✅ alle OK |
 | FastAPI backend | ✅ health + OpenAPI + endpoints |
 | React-dashboard build (tsc + vite) | ✅ schoon (48,9 kB gzip) |
@@ -64,10 +64,10 @@ equity-checks. Commit `68b0d52`.
 
 ### 3.1 Testsuite (`pytest`)
 ```
-72 passed in ~7s
+71 passed in ~12s
   unit:        44  (indicators, config, sizing, aggregator, risk, rate-limiter,
                     metrics, strategies)
-  integration: 28  (backtest, trading-engine, repositories, API, exchange,
+  integration: 27  (backtest, trading-engine, repositories, API, exchange,
                     accounting)
 ```
 
@@ -143,7 +143,7 @@ RiskEngine** — is structureel afgedwongen via `OrderExecutor.execute_signal`.
 
 De applicatie is functioneel compleet en gedraagt zich zoals bedoeld. De enige
 substantiële afwijking (equity-boekhouding bij shorts) is gevonden, verholpen en
-afgedekt met regressietests. Alle 72 tests slagen, de volledige trading-cyclus
+afgedekt met regressietests. Alle 71 tests slagen, de volledige trading-cyclus
 werkt end-to-end in paper-modus, en alle risicocontroles dwingen correct af.
 
 **Aanbeveling vóór live gebruik:** draai eerst weken paper-trading op het Binance
