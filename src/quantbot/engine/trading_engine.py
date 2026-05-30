@@ -22,7 +22,15 @@ import asyncio
 from decimal import Decimal
 
 from quantbot.core.config import Settings, get_settings
-from quantbot.core.constants import EventType, Timeframe, TradingMode
+from quantbot.core.constants import (
+    EventType,
+    ExitReason,
+    MarketType,
+    PositionSide,
+    Side,
+    Timeframe,
+    TradingMode,
+)
 from quantbot.core.events import Event, EventBus
 from quantbot.core.logging import LoggerMixin
 from quantbot.core.models import Candle, Position
@@ -130,11 +138,23 @@ class TradingEngine(LoggerMixin):
         if not result.actionable or result.signal is None:
             return None
 
-        # 4. Skip if we already hold a position for this symbol (no pyramiding here).
-        if self._portfolio.positions.has_position(symbol):
+        # 4. If we already hold a position, an opposite signal closes it (a sell
+        #    exits a long, a buy exits a short); a same-side signal is ignored
+        #    (no pyramiding). New entries only happen when flat.
+        held = self._portfolio.positions.get(symbol)
+        if held is not None and held.is_open:
+            opposes = (
+                result.signal.side is Side.SELL and held.side is PositionSide.LONG
+            ) or (result.signal.side is Side.BUY and held.side is PositionSide.SHORT)
+            if opposes:
+                await self._executor.close_position(held, exit_price=price, reason=ExitReason.SIGNAL)
             return None
 
-        # 5. Risk-gated execution.
+        # 5. Flat: open a long on a buy; open a short on a sell only where shorting
+        #    is supported (futures). On spot, a sell with no position is a no-op.
+        if result.signal.side is Side.SELL and self._gateway.market is not MarketType.FUTURES:
+            return None
+
         atr = candle.range or None
         position = await self._executor.execute_signal(result.signal, atr=atr)
         return position

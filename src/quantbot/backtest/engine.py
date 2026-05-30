@@ -24,7 +24,7 @@ import numpy as np
 from quantbot.backtest.broker import SimulatedBroker
 from quantbot.backtest.metrics import BacktestResult, compute_result
 from quantbot.core.config import Settings, get_settings
-from quantbot.core.constants import ExitReason, PositionSide, Side, Timeframe
+from quantbot.core.constants import ExitReason, MarketType, PositionSide, Side, Timeframe
 from quantbot.core.logging import LoggerMixin
 from quantbot.core.models import Candle, Position, Signal
 from quantbot.portfolio.position import PositionManager
@@ -45,6 +45,7 @@ class BacktestEngine(LoggerMixin):
         aggregator: SignalAggregator | None = None,
         broker: SimulatedBroker | None = None,
         warmup: int = 50,
+        allow_short: bool | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._strategies = strategies
@@ -55,6 +56,13 @@ class BacktestEngine(LoggerMixin):
             commission=bt.commission, slippage=bt.slippage, spread=bt.spread
         )
         self._warmup = warmup
+        # On spot you cannot short: a sell with no position is flat, and a sell
+        # while long is an exit. Only futures may open shorts. Default from market.
+        self._allow_short = (
+            allow_short
+            if allow_short is not None
+            else self._settings.binance.market is MarketType.FUTURES
+        )
 
     def run(self, candles: list[Candle], *, symbol: str | None = None) -> BacktestResult:
         """Backtest over *candles* (a single symbol/timeframe series)."""
@@ -97,15 +105,31 @@ class BacktestEngine(LoggerMixin):
                     positions, position, candle, cash, trades, entry_bar, i
                 )
 
-            # 2. Generate & aggregate signals (no new entry while in a position).
-            if not positions.has_position(symbol):
-                signal = self._evaluate_strategies(
-                    candle, opens, highs, lows, closes, volumes, i
-                )
-                if signal is not None:
-                    cash = self._try_open(
-                        signal, positions, symbol, cash, candle, entry_bar, i
-                    )
+            # 2. Generate & aggregate signals.
+            signal = self._evaluate_strategies(
+                candle, opens, highs, lows, closes, volumes, i
+            )
+            if signal is not None:
+                held = positions.get(symbol)
+                if held is not None and held.is_open:
+                    # A signal opposite to the open position closes it (a sell
+                    # exits a long; a buy exits a short). Same-direction signals
+                    # are ignored (no pyramiding here).
+                    opposes = (
+                        signal.side is Side.SELL and held.side is PositionSide.LONG
+                    ) or (signal.side is Side.BUY and held.side is PositionSide.SHORT)
+                    if opposes:
+                        cash, _ = self._close(
+                            positions, held, candle.close, ExitReason.SIGNAL,
+                            cash, trades, entry_bar, i,
+                        )
+                else:
+                    # No position: open a long on a buy; open a short on a sell
+                    # only if shorting is allowed (futures). On spot a sell is flat.
+                    if signal.side is Side.BUY or self._allow_short:
+                        cash = self._try_open(
+                            signal, positions, symbol, cash, candle, entry_bar, i
+                        )
 
             # 3. Record equity (cash + open position marked to close).
             equity_curve.append(float(self._equity(cash, positions, symbol, price)))
