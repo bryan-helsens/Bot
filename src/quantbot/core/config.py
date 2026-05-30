@@ -136,7 +136,9 @@ class AggregatorSettings(BaseModel):
     """Signal-confluence aggregation thresholds."""
 
     min_consensus: Annotated[int, Field(ge=1)] = 2
-    min_strength: Annotated[float, Field(ge=0, le=1)] = 0.5
+    # Minimum *combined* weighted strength across agreeing strategies. Because
+    # strengths are summed (one vote per strategy), this may exceed 1.0.
+    min_strength: Annotated[float, Field(ge=0)] = 0.5
     window_seconds: Annotated[int, Field(gt=0)] = 60
 
 
