@@ -49,7 +49,13 @@ class BacktestEngine(LoggerMixin):
     ) -> None:
         self._settings = settings or get_settings()
         self._strategies = strategies
-        self._risk = risk_engine or RiskEngine(self._settings.risk)
+        # Drive the risk engine's circuit-breaker cooldown by *simulation* time
+        # (candle clock), not wall-clock — otherwise a cooldown set in
+        # milliseconds of real time never expires and freezes the backtest.
+        self._sim_time = 0.0
+        self._risk = risk_engine or RiskEngine(
+            self._settings.risk, clock=lambda: self._sim_time
+        )
         self._aggregator = aggregator or SignalAggregator(self._settings.aggregator)
         bt = self._settings.backtest
         self._broker = broker or SimulatedBroker(
@@ -93,9 +99,13 @@ class BacktestEngine(LoggerMixin):
         timestamps = [candles[self._warmup].open_time.isoformat()]
         entry_bar: dict[str, int] = {}
 
+        tf_seconds = float(timeframe.seconds)
         for i in range(self._warmup, len(candles)):
             candle = candles[i]
             price = candle.close
+            # Advance the simulation clock so circuit-breaker cooldowns elapse
+            # in candle time rather than (frozen) wall-clock time.
+            self._sim_time += tf_seconds
 
             # 1. Mark and manage an open position (intrabar high/low for stops).
             position = positions.get(symbol)

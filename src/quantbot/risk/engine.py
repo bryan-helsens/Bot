@@ -19,6 +19,8 @@ risk rules can never be circumvented by a strategy or AI signal.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -104,13 +106,20 @@ class RiskEngine(LoggerMixin):
         event_bus: EventBus | None = None,
         win_rate: float = 0.5,
         win_loss_ratio: float = 1.0,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self._cfg = settings or get_settings().risk
         self._bus = event_bus
         self.sizer = PositionSizer(self._cfg)
         self.limits = LimitChecker(self._cfg)
         self.correlation = CorrelationMonitor(self._cfg)
-        self.circuit_breaker = CircuitBreaker(self._cfg)
+        # In a backtest, wall-clock time does not advance, so a wall-clock
+        # circuit-breaker cooldown would never expire and would freeze the rest
+        # of the run. Callers (the backtester) inject a *simulation clock* driven
+        # by candle time so cooldowns elapse correctly.
+        self.circuit_breaker = CircuitBreaker(
+            self._cfg, time_fn=clock if clock is not None else time.monotonic
+        )
         self.emergency = EmergencyShutdown()
         self.stops = StopManager(self._cfg)
         # Rolling trade statistics used for Kelly sizing.
