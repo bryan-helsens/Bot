@@ -1,0 +1,52 @@
+# Version control
+.git/
+.gitignore
+.github/
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+secrets/
+*.key
+*.pem
+
+# Python caches & build artefacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage*
+htmlcov/
+
+# Tests & docs (not needed in runtime image)
+tests/
+docs/
+*.md
+!README.md
+
+# Data, models, logs, reports
+data/
+models/
+logs/
+*.log
+backtest_results/
+reports/
+*.parquet
+*.csv
+
+# Node / dashboard (built separately in its own image)
+node_modules/
+dashboard/dist/
+dashboard/node_modules/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
