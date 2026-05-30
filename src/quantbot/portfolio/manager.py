@@ -57,16 +57,16 @@ class PortfolioManager(LoggerMixin):
 
     # ------------------------------------------------------------------ cash / pnl
 
-    def reserve_cash(self, amount: Decimal) -> None:
-        """Deduct notional cash when opening/scaling a position (spot)."""
-        self._cash -= amount
-
-    def release_cash(self, amount: Decimal) -> None:
-        """Return notional cash when closing a position (spot)."""
-        self._cash += amount
-
     def apply_trade(self, trade: Trade) -> None:
-        """Apply a realised trade's PnL and fees to the portfolio."""
+        """Apply a realised trade's PnL and fees to cash.
+
+        Equity is tracked on a PnL basis: cash only moves when PnL is realised.
+        Opening a position does not move cash — the position's unrealised PnL
+        (less the entry fees it has already accrued) is reflected in
+        :meth:`equity`. ``trade.net_pnl`` already nets all fees, so no separate
+        fee deduction is applied here. This is side-agnostic and therefore
+        correct for both long and short positions.
+        """
         self._realized_pnl += trade.net_pnl
         self._fees_paid += trade.fees
         self._cash += trade.net_pnl
@@ -74,11 +74,6 @@ class PortfolioManager(LoggerMixin):
             "trade_applied", symbol=trade.symbol, net_pnl=float(trade.net_pnl),
             realized_total=float(self._realized_pnl),
         )
-
-    def apply_fee(self, fee: Decimal) -> None:
-        """Apply a standalone fee (e.g. on entry) to cash."""
-        self._cash -= fee
-        self._fees_paid += fee
 
     # ------------------------------------------------------------------ equity
 
@@ -97,9 +92,18 @@ class PortfolioManager(LoggerMixin):
     def unrealized_pnl(self) -> Decimal:
         return self.positions.total_unrealized_pnl(self._prices)
 
+    def _open_fees(self) -> Decimal:
+        """Fees already accrued on currently-open positions (not yet realised)."""
+        return sum((p.fees_paid for p in self.positions.all_open()), Decimal("0"))
+
     def equity(self) -> Decimal:
-        """Total account equity = cash + unrealised PnL of open positions."""
-        return self._cash + self.unrealized_pnl()
+        """Total account equity (side-agnostic, PnL based).
+
+        ``equity = cash + unrealised_pnl − fees_on_open_positions``. Correct for
+        both long and short: a short that moves against us yields negative
+        unrealised PnL and lowers equity, as it must.
+        """
+        return self._cash + self.unrealized_pnl() - self._open_fees()
 
     def exposure(self) -> Decimal:
         """Total notional exposure across open positions."""
