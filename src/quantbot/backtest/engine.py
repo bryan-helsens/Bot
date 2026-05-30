@@ -173,13 +173,14 @@ class BacktestEngine(LoggerMixin):
         self, signal: Signal, positions: PositionManager, symbol: str,
         cash: Decimal, candle: Candle, entry_bar: dict, i: int,
     ) -> Decimal:
+        # Equity (not raw cash) is the correct basis for sizing; with no open
+        # position here, equity equals cash.
         view = PortfolioView(equity=cash, available_balance=cash, open_positions=[])
         proposal = _run_risk(self._risk, signal, view, candle.range or None)
         if not proposal.approved or proposal.quantity <= 0:
             return cash
         fill = self._broker.fill(signal.side, proposal.quantity, candle.close)
-        cost = fill.notional + fill.commission
-        if cost > cash:  # cannot afford after costs
+        if fill.notional > cash:  # a single position may not exceed capital
             return cash
         positions.open_position(
             symbol=symbol, side=signal.side, quantity=fill.quantity,
@@ -188,7 +189,9 @@ class BacktestEngine(LoggerMixin):
             fee=fill.commission,
         )
         entry_bar[symbol] = i
-        return cash - cost
+        # PnL-based accounting: opening does not move cash; the entry fee is
+        # carried on the position and realised (in net_pnl) on close.
+        return cash
 
     def _manage_position(
         self, positions: PositionManager, position: Position, candle: Candle,
@@ -243,7 +246,7 @@ class BacktestEngine(LoggerMixin):
         if trade is not None:
             trades.append(trade)
             self._risk.record_trade_result(position, trade.net_pnl)
-            cash += fill.notional - fill.commission
+            cash += trade.net_pnl  # realise PnL (already net of all fees)
         return cash, True
 
     def _reduce(
@@ -260,7 +263,7 @@ class BacktestEngine(LoggerMixin):
         if trade is not None:
             trades.append(trade)
             self._risk.record_trade_result(position, trade.net_pnl)
-            cash += fill.notional - fill.commission
+            cash += trade.net_pnl  # realise the partial PnL (net of fees)
         return cash
 
     @staticmethod
@@ -268,7 +271,8 @@ class BacktestEngine(LoggerMixin):
         position = positions.get(symbol)
         if position is None or not position.is_open:
             return cash
-        return cash + position.notional(price)
+        # Side-agnostic, PnL-based: cash + unrealised PnL − fees already accrued.
+        return cash + position.unrealized_pnl(price) - position.fees_paid
 
 
 def _run_sync(strategy: BaseStrategy, ctx: StrategyContext) -> Signal | None:

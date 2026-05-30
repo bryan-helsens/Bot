@@ -94,8 +94,8 @@ class OrderExecutor(LoggerMixin):
             fee=fee,
             market=self._gateway.market,
         )
-        self._portfolio.apply_fee(fee)
-        self._portfolio.reserve_cash(fill_price * proposal.quantity)
+        # Cash moves only when PnL is realised (on close); the entry fee is
+        # carried on the position and reflected in equity via unrealised PnL.
 
         await self._place_protective_stop(position)
         await self._emit(EventType.TRADE_OPENED, {
@@ -167,7 +167,6 @@ class OrderExecutor(LoggerMixin):
         )
         if trade is not None:
             self._portfolio.apply_trade(trade)
-            self._portfolio.release_cash(fill_price * trade.quantity)
             self._risk.record_trade_result(position, trade.net_pnl)
             await self._emit(EventType.TRADE_CLOSED, {
                 "symbol": trade.symbol,
