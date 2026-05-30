@@ -109,6 +109,24 @@ Zet kanalen aan in `.env` (`NOTIFICATIONS__TELEGRAM_ENABLED=true`, etc.). Je
 ontvangt meldingen voor: nieuwe/gesloten trades, stop-loss/take-profit,
 risk-rejects, verbindingsverlies/-herstel, grote drawdown en systeemfouten.
 
+## Testnet-verificatie
+
+Voordat je live gaat, verifieer de volledige verbinding tegen het Binance
+**testnet** met je eigen testnet-keys (maak ze op https://testnet.binance.vision/,
+alleen Reading + Spot Trading, **nooit** Withdrawals):
+
+```bash
+# in .env: BINANCE__TESTNET=true + BINANCE__API_KEY / BINANCE__API_SECRET
+python scripts/test_testnet.py                 # stages 1-4 (connectie, data, account, websocket)
+python scripts/test_testnet.py --order          # + plaatst & cancelt een test-order
+python scripts/test_testnet.py --paper           # + korte live-prijs paper-run
+python scripts/test_testnet.py --order --paper --duration 30  # alles, langer venster
+```
+
+Het script is gefaseerd (connectiviteit → marktdata → account/HMAC → websocket →
+orders → paper-run) en print per stap PASS/FAIL met een eindtotaal. Het weigert
+te draaien zonder testnet-modus of keys.
+
 ## Veiligheid & best practices
 
 - Begin op **testnet** + **paper**; valideer wekenlang vóór live.
