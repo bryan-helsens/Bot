@@ -1,0 +1,28 @@
+# Development overrides: live-reload source mounts and exposed infra ports.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    volumes:
+      - ./src:/app/src
+    environment:
+      LOG_FORMAT: console
+      ENVIRONMENT: development
+    command: ["api"]
+
+  bot:
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    environment:
+      LOG_FORMAT: console
+      ENVIRONMENT: development
+      TRADING_MODE: paper

@@ -1,0 +1,89 @@
+# QuantBot production stack: bot + api + postgres + redis + dashboard.
+# Configure via .env (copy from .env.example). Start with: docker compose up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE__NAME:-quantbot}
+      POSTGRES_USER: ${DATABASE__USER:-quantbot}
+      POSTGRES_PASSWORD: ${DATABASE__PASSWORD:-change_me}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE__USER:-quantbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build: .
+    command: ["migrate"]
+    env_file: .env
+    environment:
+      DATABASE__HOST: postgres
+      REDIS__HOST: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    command: ["api"]
+    env_file: .env
+    environment:
+      DATABASE__HOST: postgres
+      REDIS__HOST: redis
+      API__HOST: 0.0.0.0
+    ports:
+      - "${API__PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  bot:
+    build: .
+    command: ["run"]
+    env_file: .env
+    environment:
+      DATABASE__HOST: postgres
+      REDIS__HOST: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "${DASHBOARD_PORT:-5173}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
