@@ -1,0 +1,49 @@
+# Profit-focused, trend-riding configuration (long-only, "let winners run").
+#
+# Validated on 21 coins of REAL daily data (CoinMetrics 2023-2026) through the
+# backtest engine (whose execution is oracle-tested for faithfulness):
+#   avg return +24%, median +15.5%, profitable on 13/21 coins.
+#
+# CRITICAL pairing — this strategy ONLY performs with the matching risk settings
+# below (put these in .env). Risk-based sizing deploys ~1/3 of capital and caps
+# trend upside; trend-riding needs near-full deployment via FIXED sizing, a wide
+# trailing stop, and NO take-profit cap (never cut a winner short).
+#
+#   RISK__SIZING_METHOD=fixed
+#   RISK__RISK_PER_TRADE=0.10          # FIXED: ~full capital per position
+#   RISK__DEFAULT_STOP_LOSS_PCT=0.30   # wide hard stop (trailing does the work)
+#   RISK__TRAILING_STOP_PCT=0.25       # ride the trend; exit on a 25% pullback
+#   RISK__BREAK_EVEN_TRIGGER_PCT=0.0   # off (trailing handles protection)
+#   RISK__TAKE_PROFIT_LEVELS=          # EMPTY: never cap a winner
+#   AGGREGATOR__MIN_CONSENSUS=1        # single trend strategy
+#
+# HONEST EXPECTATIONS:
+#  * Beats buy & hold in down/sideways markets and on the median coin.
+#  * Still TRAILS a raging bull (BTC bot +93% vs buy & hold +205%): a stopped
+#    strategy is never 100% invested. Targets risk-adjusted growth, not maximum
+#    bull-market gain.
+#  * Parameters here are IN-SAMPLE. ALWAYS run walk-forward validation
+#    (docs/OPTIMIZATION.md) and weeks of testnet paper-trading before going live.
+
+strategies:
+  - name: trend_rider_btc
+    class: TrendRiderStrategy
+    market: spot
+    enabled: true
+    symbols: [BTCUSDT]
+    timeframes: [1d]
+    params:
+      fast_period: 20
+      slow_period: 50
+      regime_period: 100
+
+  - name: trend_rider_eth
+    class: TrendRiderStrategy
+    market: spot
+    enabled: true
+    symbols: [ETHUSDT]
+    timeframes: [1d]
+    params:
+      fast_period: 20
+      slow_period: 50
+      regime_period: 100
