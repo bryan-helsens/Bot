@@ -21,7 +21,7 @@ from decimal import Decimal
 
 import numpy as np
 
-from quantbot.backtest.broker import SimulatedBroker
+from quantbot.backtest.broker import Fill, SimulatedBroker
 from quantbot.backtest.metrics import BacktestResult, compute_result
 from quantbot.core.config import Settings, get_settings
 from quantbot.core.constants import ExitReason, MarketType, PositionSide, Side, Timeframe
@@ -214,7 +214,17 @@ class BacktestEngine(LoggerMixin):
         if not proposal.approved or proposal.quantity <= 0:
             return cash
         fill = self._broker.fill(signal.side, proposal.quantity, candle.close)
-        if fill.notional > cash:  # a single position may not exceed capital
+        # A spot position cannot cost more cash than is available. Slippage/spread
+        # can push the fill notional slightly above the sized notional, so scale
+        # the quantity down to the fill price so the cost fits the cash budget (an
+        # exchange fills only what you can afford) rather than silently dropping
+        # the whole trade.
+        max_notional = cash / (Decimal(1) + self._settings.backtest.commission)
+        if fill.notional > max_notional and fill.price > 0:
+            scaled_qty = max_notional / fill.price
+            fill = Fill(price=fill.price, quantity=scaled_qty,
+                        commission=fill.price * scaled_qty * self._broker.commission_rate)
+        if fill.quantity <= 0:
             return cash
         positions.open_position(
             symbol=symbol, side=signal.side, quantity=fill.quantity,
