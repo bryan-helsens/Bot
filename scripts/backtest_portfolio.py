@@ -25,7 +25,8 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-# The OOS-validated winning portfolio config (see docs/PORTFOLIO_PROFIT_REPORT.md).
+# Example config. NOTE: NOT proven profitable — under realistic stop fills (the
+# engine default) this loses on daily data. See docs/REALISTIC_FILLS_REPORT.md.
 WINNING = {
     "risk_per_trade": Decimal("0.015"),
     "max_portfolio_exposure": Decimal("0.80"),

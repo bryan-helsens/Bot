@@ -1,3 +1,10 @@
+> # ⚠️ ACHTERHAALD — zie `docs/REALISTIC_FILLS_REPORT.md`
+> De hieronder gerapporteerde winst was een **backtest-artefact**: de engine vulde
+> stop-loss orders optimistisch op de stopprijs i.p.v. op de (gegapte) marktprijs.
+> Onder realistische fills maakt deze config **geen winst** (FULL −24%, OOS −15%);
+> de live paper-engine bevestigde dat (−40%). Lees dit als historische context,
+> niet als geldige resultaten.
+
 # Profit-doorbraak — winstgevende configuratie gevonden
 
 **Datum:** 2026-05-31 · **Data:** 47 echte coins (large-caps + meme/small-caps),

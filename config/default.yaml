@@ -16,7 +16,7 @@ risk:
     - [0.06, 0.2]
   max_open_trades: 5
   max_exposure_per_coin: 0.20
-  max_portfolio_exposure: 0.60   # OOS-validated portfolio config (real engine): 0.80 cap + risk_per_trade 0.015 — see docs/PORTFOLIO_PROFIT_REPORT.md
+  max_portfolio_exposure: 0.60   # NB: no daily config is proven profitable under realistic fills — see docs/REALISTIC_FILLS_REPORT.md before trusting any backtest
   max_daily_loss: 0.05
   max_weekly_loss: 0.10
   max_drawdown: 0.20

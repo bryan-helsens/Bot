@@ -46,9 +46,18 @@ class BacktestEngine(LoggerMixin):
         broker: SimulatedBroker | None = None,
         warmup: int = 50,
         allow_short: bool | None = None,
+        optimistic_stops: bool = False,
     ) -> None:
         self._settings = settings or get_settings()
         self._strategies = strategies
+        # Stop-fill model. False (default, conservative): a stop fills at the
+        # bar's open when price gapped past it — realistic for a daily-frequency
+        # bot, and what reconciles the backtest with live paper-trading. True
+        # (optimistic): a stop always fills exactly at its price, which assumes
+        # flawless intraday execution; for 24/7 crypto watched continuously the
+        # truth sits between the two, resolvable only with intraday data. The flag
+        # lets both bounds be measured. See docs/REALISTIC_FILLS_REPORT.md.
+        self._optimistic_stops = optimistic_stops
         # Drive the risk engine's circuit-breaker cooldown by *simulation* time
         # (candle clock), not wall-clock — otherwise a cooldown set in
         # milliseconds of real time never expires and freezes the backtest.
@@ -260,9 +269,24 @@ class BacktestEngine(LoggerMixin):
                 return cash, False
             decision = tp_decision
 
-        exit_price = position.stop_loss if decision.exit_reason in (
-            ExitReason.STOP_LOSS, ExitReason.TRAILING_STOP
-        ) else candle.close
+        # Stop/trailing fill price. Conservative (default): model gap-through — a
+        # stop fills at its price only if the bar did not open beyond it; if price
+        # gapped past the stop you fill at the open (far worse). Assuming otherwise
+        # lets the backtest book tiny losses on crashes that in reality fill far
+        # worse — the asymmetry that once diverged the backtest from live paper-
+        # trading. For close-only daily series (open == close) this fills at the
+        # close. Optimistic mode fills exactly at the stop (assumes perfect
+        # intraday execution).
+        if decision.exit_reason in (ExitReason.STOP_LOSS, ExitReason.TRAILING_STOP):
+            stop_price = position.stop_loss or candle.close
+            if self._optimistic_stops:
+                exit_price = stop_price
+            elif position.side is PositionSide.LONG:
+                exit_price = min(stop_price, candle.open)
+            else:
+                exit_price = max(stop_price, candle.open)
+        else:
+            exit_price = candle.close
         if decision.exit_fraction >= Decimal("1"):
             cash, _ = self._close(
                 positions, position, exit_price or candle.close, decision.exit_reason,

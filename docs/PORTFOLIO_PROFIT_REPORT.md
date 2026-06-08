@@ -1,3 +1,9 @@
+> # ⚠️ ACHTERHAALD — zie `docs/REALISTIC_FILLS_REPORT.md`
+> De +55%/+101% hieronder was een **backtest-artefact** (optimistische stop-fills).
+> Onder realistische fills maakt deze config **geen winst** (FULL −24%, OOS −15%),
+> bevestigd door de live paper-engine (−40%). Het multi-symbool-engine-werk en de
+> caps blijven geldig; de winstcijfers niet. Lees als historische context.
+
 # Portfolio-mode winst — gevalideerd door de ÉCHTE productie-engine
 
 **Datum:** 2026-06-08 · **Data:** echte CoinMetrics dagkoersen 2023–2026, 45 coins

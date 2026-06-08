@@ -1,8 +1,17 @@
-# PROFIT configuration — RSI mean-reversion (dip-buying) with RISK sizing.
+# RSI mean-reversion (dip-buying) example configuration with RISK sizing.
 #
-# Validated GENUINELY PROFITABLE — including OUT-OF-SAMPLE (walk-forward) — across
-# 45 real coins (large-caps + meme/small-caps, CoinMetrics 2023-2026), measured
-# through the production backtest engine:
+# ##############################################################################
+# # ⚠️ IMPORTANT — this is NOT a proven-profitable config. See
+# #    docs/REALISTIC_FILLS_REPORT.md. The "profitable" numbers below came from a
+# #    backtest that filled stop-losses OPTIMISTICALLY (at the stop price). Under
+# #    realistic gap-through fills (now the default) this config is NOT profitable
+# #    on daily data (FULL -24%, OOS -15%); the live paper-engine confirmed it
+# #    (-40%). Treat the figures below as historical/illustrative only. Do NOT run
+# #    with real money. Validate any config via testnet paper-trading first.
+# ##############################################################################
+#
+# [HISTORICAL — optimistic-fill backtest, since corrected] across 45 real coins
+# (large-caps + meme/small-caps, CoinMetrics 2023-2026):
 #
 #   FULL  : avg +11.1%, MEDIAN +12.6%, profitable 32/45, beats buy&hold 30/45, DD 13%
 #   OOS   : avg  +5.0%, median  +3.6%, profitable 29/45, beats buy&hold 38/45 (84%!)

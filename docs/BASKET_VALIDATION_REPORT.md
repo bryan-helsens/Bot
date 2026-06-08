@@ -1,3 +1,9 @@
+> # ⚠️ ACHTERHAALD — zie `docs/REALISTIC_FILLS_REPORT.md`
+> De winst per mand hieronder kwam uit de backtest met **optimistische stop-fills**.
+> Onder realistische fills is de strategie op dit dagdata-mandje **niet winstgevend**
+> (alleen defensief: verliest minder dan buy & hold in de berenmarkt). Lees als
+> historische context, niet als geldige winstresultaten.
+
 # Basket-validatie — grote coins én kleine/meme coins
 
 **Datum:** 2026-06-08 · **Engine:** `PortfolioBacktestEngine` (productie-engine,
