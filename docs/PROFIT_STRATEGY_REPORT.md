@@ -1,5 +1,15 @@
 # Profit-strategy report — TrendRider op echte data
 
+> ⚠️ **CORRECTIE (2026-05-31):** de cijfers "+24% gemiddeld / +15,5% mediaan" in
+> de eerste versie van dit rapport waren **ONJUIST**. Ze ontstonden door een bug
+> waardoor de backtest **0 trades** plaatste (FIXED full-deploy sizing + slippage
+> liet de hele trade vallen). Na de fix (commit `6eac21c`) zijn de werkelijke
+> TrendRider-cijfers: **BTC +105%** (vs +189% buy & hold) op large-caps, maar
+> **−81% (FIXED) / −9% (RISK 2%)** op meme/small-caps. Zie
+> `docs/MEME_SMALLCAP_REPORT.md` voor de gecorrigeerde, volledige analyse en de
+> belangrijkste les: **positiegrootte (RISK-sizing) is bepalender dan de
+> strategie**, en **segment-afhankelijke strategieën** werken het best.
+
 **Datum:** 2026-05-31 · **Data:** CoinMetrics dagkoersen 2023–2026 (21 coins)
 
 Doel: een configuratie die op echte data aantoonbaar winst genereert — en het
