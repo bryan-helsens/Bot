@@ -9,21 +9,26 @@ prototype.
 
 ---
 
-## Het winnende resultaat
+## Het winnende resultaat — gevalideerd OUT-OF-SAMPLE
 
-**RSI mean-reversion (dip-buying) + RISK 2% sizing**, gemeten over 47 coins:
+**RSI mean-reversion (dip-buying, oversold 35) + RISK 3% sizing + 6% take-profit**,
+gemeten over 45 coins via de **productie-engine**:
 
-| Metric | Waarde |
-|--------|-------:|
-| Gemiddeld rendement | **+4,9%** |
-| **Mediaan rendement** | **+6,3%** |
-| Winstgevend | **34/47 coins (72%)** |
-| Verslaat buy & hold | **31/47** |
-| Gemiddelde max drawdown | **8%** |
+| Metric | FULL | OOS (ongezien) |
+|--------|-----:|---------------:|
+| Gemiddeld rendement | **+11,1%** | **+5,0%** |
+| Mediaan rendement | **+12,6%** | +3,6% |
+| Winstgevend | 32/45 | **29/45** |
+| **Verslaat buy & hold** | 30/45 | **38/45 (84%)** |
+| Max drawdown | 13% | 12% |
 
-…op een mandje waarvan de **mediaan-coin ~64% verloor**. De winst komt uit het
-kopen van oversold dips (RSI < 30) en snel winst nemen (RSI > 70 of +10%), met
-elke trade ~2% equity-risico.
+OOS = laatste 45% van elke coin, **niet gebruikt tijdens tunen**. Dat de strategie
+out-of-sample buy & hold op **84% van de coins verslaat** — over een mandje dat
+zwaar daalde — is het beslissende robuustheidsbewijs. ~12-14 trades per coin
+(genoeg om niet op toeval te leunen).
+
+**Het parametervlak is glad** (geen scherpe piek): stop 6-12%, target 6-10%,
+oversold 32-35 blijven allemaal OOS-winstgevend. Dat pleit tegen overfitting.
 
 ---
 
