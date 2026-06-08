@@ -33,6 +33,17 @@
 #   RISK__TAKE_PROFIT_LEVELS=0.06:1.0
 #   AGGREGATOR__MIN_CONSENSUS=1
 #
+# PORTFOLIO MODE (running ONE account over many coins at once — how the bot runs
+# live) adds two more settings. Validated OOS at +13.4% total / +8.4% CAGR over
+# the broad basket (see docs/PORTFOLIO_PROFIT_REPORT.md). The decisive, counter-
+# intuitive finding: a LOW exposure cap (20%) BEATS a high one — crypto alts crash
+# together, so capping total deployed capital is what protects the account:
+#   RISK__MAX_PORTFOLIO_EXPOSURE=0.20   # cap total deployed capital at 20% of equity
+#   RISK__MAX_OPEN_TRADES=5             # at most 5 concurrent positions
+# (sweeps: exposure 12-20% all OOS-profitable, 20% best; >25% degrades sharply.
+#  max_open_trades 4-5 best. List a BROAD symbol basket below so there are always
+#  enough oversold dips for the engine to pick the most-oversold within budget.)
+#
 # The parameter surface is SMOOTH (no sharp optimum), which argues against
 # overfitting: nearby values (stop 0.06-0.12, target 0.06-0.10, os 32-35) all
 # stay profitable out-of-sample.
