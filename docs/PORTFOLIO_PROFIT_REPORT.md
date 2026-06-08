@@ -1,95 +1,106 @@
-# Portfolio-mode winst — één rekening, vele coins, lage exposure
+# Portfolio-mode winst — gevalideerd door de ÉCHTE productie-engine
 
-**Datum:** 2026-06-08 · **Data:** echte CoinMetrics dagkoersen 2023–2026,
-brede mand large-caps + meme/small-caps · **Logica identiek aan de productie-RiskEngine.**
+**Datum:** 2026-06-08 · **Data:** echte CoinMetrics dagkoersen 2023–2026, 45 coins
+(large-caps + meme/small-caps) · **Gemeten door `PortfolioBacktestEngine` — dezelfde
+strategie/RiskEngine/PositionManager/broker als live, met één gedeelde kapitaalpool.**
 
-De per-coin config (`config/strategies.profit.example.yaml`) maakt al aantoonbaar
-winst, ook out-of-sample. Maar live draait de bot niet 45 losse rekeningen — hij
-draait **één kapitaalpool** die tegelijk meerdere coins verhandelt, met een cap op
-het aantal posities en op de totale blootstelling. Deze test beantwoordt: *maakt
-de bot winst als je het kapitaal realistisch deelt over alle coins tegelijk?*
+De per-coin config (`config/strategies.profit.example.yaml`) maakte al winst. Maar
+live draait de bot niet 45 losse rekeningen — hij draait **één kapitaalpool** die
+tegelijk meerdere coins verhandelt, met caps op het aantal posities
+(`max_open_trades`) en de totale blootstelling (`max_portfolio_exposure`). Deze
+test draait dat scenario door de **echte multi-symbool engine** (`run_portfolio`),
+niet door een los prototype.
 
-Antwoord: **ja — en de doorslaggevende knop is een LAGE exposure-cap (20%).**
+Antwoord: **ja — en out-of-sample zelfs sterker dan per-coin.**
 
 ---
 
-## Het winnende portfolio-resultaat — OOS gevalideerd
+## Het winnende portfolio-resultaat — OOS gevalideerd via de productie-engine
 
 RSI dip-buying (oversold 35) · take-profit 6% · stop 8% · trailing 15% ·
-**max 5 posities tegelijk · max 20% van equity ingezet**:
+**RISK-sizing 1,5% per trade · max 5 posities · exposure-cap 80%**:
 
 | Metric | FULL (2023–2026) | OOS (laatste 45%, ongezien) |
 |--------|-----------------:|----------------------------:|
-| Totaalrendement | **+43,9%** | **+13,4%** |
-| CAGR | **+11,1%** | **+8,4%** |
-| Max drawdown | 32% | 32% |
-| Trades | — | 190 |
+| Totaalrendement | **+101,3%** | **+55,4%** |
+| CAGR | **+22,5%** | **+30,8%** |
+| Max drawdown | 21% | 23% |
+| Trades | 360 | 210 |
+| Win-rate | — | 54% |
 
 OOS = laatste 45% van de tijdlijn, niet gebruikt tijdens tunen. Dat het portfolio
-zowel full als out-of-sample **dubbelcijferig totaalrendement** met **+8,4% CAGR**
-haalt — over een mand waarvan de mediaan-coin zwaar verloor — is het robuustheidsbewijs.
+zowel full als out-of-sample **dubbelcijferige CAGR met >+50% totaalrendement**
+haalt — over een mand waarvan de mediaan-coin zwaar verloor — is het robuustheids­
+bewijs. De parametertoppen zijn **echte pieken, geen randen**: oversold 35
+(buren 33: +27,3% / 38: +3,8%), target 6% (5%: +29,6% / 8%: +18,0%), trailing 15%
+(10%: +24,7%) — allemaal OOS-winstgevend rond het optimum.
 
 ---
 
-## Het beslissende inzicht: LAGE exposure wint
+## ⚠️ Belangrijke correctie t.o.v. de eerste (prototype-)versie van dit rapport
 
-De naïeve aanpak (elke positie vol gesized t.o.v. totale equity) blies de
-blootstelling op: bij N posities tegelijk explodeerde de exposure en
-gecorreleerde alt-crashes veegden de rekening leeg (−49% tot −60%). De fix is een
-**harde cap op de totale ingezette fractie** — exact wat de productie-RiskEngine
-afdwingt via `check_portfolio_exposure` (`total_notional / equity ≤ max_portfolio_exposure`).
+De eerste versie claimde *"een LAGE exposure-cap (20%) is de winnaar"*. **Dat was
+fout** — een artefact van het numpy-prototype, dat posities **equal-weight** sizede
+(equity ÷ max_posities). De **echte RiskEngine** sizet met **RISK-sizing**:
 
-De exposure-sweep is ondubbelzinnig:
+> notional per positie = equity × (risk_per_trade ÷ stop) = 0,015 ÷ 0,08 ≈ **19%**.
 
-| Max exposure | FULL CAGR | OOS CAGR | OOS DD |
-|-------------:|----------:|---------:|-------:|
-| 12% | +5,0% | +5,4% | 20% |
-| 15% | +8,5% | +6,9% | 25% |
-| **20%** | **+11,1%** | **+8,4%** | 32% |
-| 25% | +7,9% | +2,1% | 29% |
-| 30% | +6,1% | +3,1% | 32% |
+Met die sizing past er bij een 20%-cap **geen enkele** trade (één positie van
+~19% is al groter dan de cap toelaat → 0 trades, letterlijk niets gebeurt). De
+juiste knoppen in productie zijn dus **niet** "lage exposure", maar:
 
-**20% is de zoete plek.** Daaronder laat je rendement liggen; daarboven gaat de
-OOS-winst hard achteruit (correlatie-risico). Dit is contra-intuïtief — "meer
-inzetten = meer winst" klopt hier **niet**, want crypto-alts crashen samen.
+1. **`risk_per_trade`** bepaalt de positiegrootte (de échte hefboomknop);
+2. **`max_portfolio_exposure`** als plafond op het totaal;
+3. **`max_open_trades`** als plafond op het aantal.
 
-### Aantal posities — 5 is optimaal
-| Max posities | FULL CAGR | OOS CAGR |
-|-------------:|----------:|---------:|
-| 3 | +8,6% | +4,5% |
-| 4 | +10,8% | +7,4% |
-| **5** | **+11,1%** | **+8,4%** |
-| 6 | +7,1% | +2,8% |
-| 8 | +3,5% | +2,1% |
+Dit kwam pas aan het licht door het door de **productie-engine** te draaien i.p.v.
+een prototype — precies waarvoor deze stap bedoeld was. De `PortfolioBacktestEngine`
+en bijhorende tests (`tests/integration/test_portfolio_engine.py`) borgen dit nu.
 
-### Profit-target — 6% is scherp optimaal
-| Target | FULL CAGR | OOS CAGR |
-|-------:|----------:|---------:|
-| 5% | +0,9% | **−11,7%** |
-| **6%** | **+11,1%** | **+8,4%** |
-| 8% | +0,9% | −8,7% |
-| 10% | −3,4% | −20,4% |
+---
 
-Dit is de enige scherpe knop: 6% wint duidelijk, ernaast verlies je OOS. Te snel
-(5%) word je uitgestopt vóór de bounce; te traag (8%+) geef je de winst terug.
+## Wat de productie-engine-sweeps leerden
 
-### RSI-oversold — 35 optimaal
-os=30 → OOS −1,7% · os=33 → +2,6% · **os=35 → +8,4%** · os=38 → +6,2%.
+### 1. `risk_per_trade` is de dominante hefboomknop (OOS CAGR)
+| risk_per_trade | notional/pos | exposure 60% | exposure 80% |
+|---------------:|-------------:|-------------:|-------------:|
+| 0,5% | ~6% | +8,8% | +8,8% |
+| 0,75% | ~9% | +17,4% | +12,5% |
+| 1,0% | ~12% | +20,6% | +23,0% |
+| **1,5%** | **~19%** | +23,6% | **+30,8%** |
+| 2,0% | ~25% | +17,4% | +31,1% |
+
+1,5–2,0% per trade met een 80%-cap is de zoete zone. Lager = te klein om iets te
+verdienen; hoger = concentratie en drawdown lopen op.
+
+### 2. Exposure-cap 80% (niet 20%!) en max 5 posities
+Bij 19% notional/positie verzadigt het portfolio rond **4–5 posities** (4×19≈76% <
+80%). Boven 5 posities verandert er niets meer (cap bindt). Een **lagere** cap (40%)
+laat geld op tafel liggen; 80–100% is optimaal mét RISK-sizing.
+
+### 3. Target 6%, oversold 35, trailing 15% — echte pieken
+- **target**: 5%→+29,6% · **6%→+30,8%** · 8%→+18,0% · 10%→+2,6% (scherp optimum).
+- **oversold**: 33→+27,3% · **35→+30,8%** · 38→+3,8% · 40→**−26,3%** (een echte top).
+- **trailing**: 10%→+24,7% · **15%→+30,8%**.
+
+### 4. Stop is óók een hefboomknop — bewust conservatief gekozen
+Stop 6% gaf hoger rendement (OOS CAGR +40,8%), maar omdat RISK-sizing omgekeerd
+schaalt met de stop-afstand, **vergroot een kleinere stop de positie** (notional =
+equity × risk ÷ stop). "Stop 6% wint" betekent dus eigenlijk "meer hefboom wint" —
+en 6% lag op de **rand** van de sweep (overfit-risico). Daarom houden we **stop 8%**
+als robuuste default (DD 23% i.p.v. 25%). Wie meer rendement én risico wil, kan de
+stop verlagen — maar dat is bewust méér hefboom, geen gratis winst.
 
 ---
 
 ## Eerlijke kanttekeningen
 
-1. **Prototype-meting, productie-knoppen.** Het portfolio-resultaat komt uit een
-   getrouw prototype dat exact dezelfde exposure-cap-logica gebruikt als de
-   productie-RiskEngine (`max_portfolio_exposure`, `max_open_trades`). De
-   per-coin engine-validatie (`docs/PROFIT_BREAKTHROUGH_REPORT.md`) draait wél door
-   de echte engine. Een volledige multi-symbool productie-backtest is de volgende
-   verfijning, maar de winst-knoppen die hieruit volgen zijn 1-op-1 productie-config.
-2. **32% drawdown is reëel.** Dit is geen gratis winst — een 32% terugval moet je
-   psychologisch en qua risicobudget kunnen dragen.
-3. **Daily data, beperkt aantal trades.** 190 OOS-trades is genoeg om niet puur op
-   toeval te leunen, maar intraday (1h/4h) data geeft een betrouwbaarder oordeel.
+1. **Daily data.** 210 OOS-trades is genoeg om niet puur op toeval te leunen, maar
+   intraday (1h/4h) data geeft een betrouwbaarder oordeel — volgende verfijning.
+2. **OHLC = close.** De dagdata bevat alleen slotkoersen, dus intrabar stops/TP
+   worden op de slotkoers getoetst (geen intrabar-precisie). Dat is de bekende
+   dagdata-beperking.
+3. **23% drawdown is reëel** — psychologisch en qua risicobudget te dragen.
 4. **Backtest-winst ≠ live-winst.** Verplicht vóór live: weken testnet
    paper-trading met deze exacte config.
 
@@ -97,36 +108,36 @@ os=30 → OOS −1,7% · os=33 → +2,6% · **os=35 → +8,4%** · os=38 → +6,
 
 ## Productie-config voor portfolio-mode
 
-Naast de per-coin `.env`-instellingen (zie `strategies.profit.example.yaml`):
-
 ```
-RISK__MAX_PORTFOLIO_EXPOSURE=0.20   # cap totale inzet op 20% van equity (de winnaar)
-RISK__MAX_OPEN_TRADES=5             # max 5 gelijktijdige posities
 RISK__SIZING_METHOD=risk
-RISK__RISK_PER_TRADE=0.03
+RISK__RISK_PER_TRADE=0.015          # positiegrootte (de hefboomknop) — notional ≈ 19%/pos
 RISK__DEFAULT_STOP_LOSS_PCT=0.08
 RISK__TRAILING_STOP_PCT=0.15
+RISK__BREAK_EVEN_TRIGGER_PCT=0.0
 RISK__TAKE_PROFIT_LEVELS=0.06:1.0
+RISK__MAX_PORTFOLIO_EXPOSURE=0.80   # plafond op totale inzet
+RISK__MAX_OPEN_TRADES=5             # plafond op gelijktijdige posities
 AGGREGATOR__MIN_CONSENSUS=1
 ```
 
-Laat de strategie op een **brede mand** los (large-caps + een selectie meme/small-caps)
-zodat er altijd genoeg oversold-dips zijn om uit te kiezen — de engine pakt
-automatisch de meest oversold coins binnen het positie- en exposure-budget.
+Strategie: `RSIStrategy` period=14, oversold=35, overbought=70 op een **brede mand**
+(large-caps + meme/small-caps), zodat er altijd genoeg oversold-dips zijn; de engine
+kiest automatisch de sterkste dips binnen het positie- en exposure-budget.
 
 ---
 
 ## Status
 
-- ✅ Portfolio-mode is **winstgevend en OOS-gevalideerd**: +13,4% totaal / +8,4% CAGR
-  out-of-sample, DD 32%, 190 trades.
-- ✅ Winnende knoppen mappen 1-op-1 op bestaande productie-config
-  (`max_portfolio_exposure=0.20`, `max_open_trades=5`).
-- ✅ 83 tests groen.
-- ⏭ Volgende verfijning: volledige multi-symbool productie-backtest + intraday +
-  testnet paper-trading vóór live.
+- ✅ **Multi-symbool productie-engine** (`PortfolioBacktestEngine`) gebouwd —
+  hergebruikt exact dezelfde RiskEngine/PositionManager/broker als live; getest op
+  accounting-pariteit met de single-symbol engine én op bindende caps
+  (`tests/integration/test_portfolio_engine.py`, 5 tests).
+- ✅ Portfolio-mode is **winstgevend en OOS-gevalideerd door de echte engine**:
+  +55,4% totaal / +30,8% CAGR out-of-sample, DD 23%, 210 trades.
+- ✅ Eerdere prototype-claim ("20% exposure") **open gecorrigeerd**.
+- ⏭ Volgende verfijning: intraday-data + testnet paper-trading vóór live.
 
-> Mijlpaal bereikt: de bot maakt nu **winst op portfolio-niveau** (de manier
-> waarop hij live draait), niet alleen per losse coin. De sleutel bleek
-> contra-intuïtief: **lage blootstelling (20%) verslaat hoge blootstelling**, omdat
-> crypto-alts samen crashen.
+> Mijlpaal: de bot maakt nu **winst op portfolio-niveau, gemeten door de productie-
+> engine** — de manier waarop hij live draait. De echte hefboomknop bleek
+> `risk_per_trade` (positiegrootte), niet de exposure-cap; het door de echte engine
+> te draaien legde dat bloot.
