@@ -81,10 +81,17 @@ class TradingEngine(LoggerMixin):
     async def start(self) -> None:
         """Connect, warm up data, subscribe to candles and begin trading."""
         self.log.info("engine_starting", mode=self._settings.trading_mode.value)
-        # Initialise risk baseline from the (real or simulated) account.
-        account = await self._gateway.get_account()
-        equity = account.total_equity or self._settings.backtest.initial_capital
-        self._risk.set_starting_equity(equity)
+        # Baseline the risk engine from the bot's OWN tracked equity — the exact
+        # quantity `update_equity` feeds it later — NOT the raw exchange wallet. A
+        # pre-funded testnet wallet (large faucet balance) vs the bot's configured
+        # capital would otherwise look like a ~100% instant drawdown and trip the
+        # emergency stop the moment trading starts.
+        try:
+            account = await self._gateway.get_account()
+            self.log.info("account_loaded", wallet_equity=float(account.total_equity))
+        except Exception as exc:  # noqa: BLE001 - account fetch is informational only
+            self.log.warning("account_fetch_failed", error=str(exc))
+        self._risk.set_starting_equity(self._portfolio.equity())
 
         symbols = self._settings.symbols
         timeframes = self._settings.timeframes

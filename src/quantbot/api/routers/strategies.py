@@ -46,15 +46,31 @@ async def strategy_performance(state: StateDep, _: AuthDep) -> list[StrategyPerf
         out.append(
             StrategyPerformanceSchema(
                 strategy=strategy,
-                net_profit=metrics.net_profit,
-                profit_factor=metrics.profit_factor,
-                win_rate=metrics.win_rate,
-                sharpe_ratio=metrics.sharpe_ratio,
-                max_drawdown=metrics.max_drawdown,
+                net_profit=_finite(metrics.net_profit),
+                profit_factor=_finite(metrics.profit_factor),
+                win_rate=_finite(metrics.win_rate),
+                sharpe_ratio=_finite(metrics.sharpe_ratio),
+                max_drawdown=_finite(metrics.max_drawdown),
                 total_trades=metrics.total_trades,
             )
         )
     return out
+
+
+def _finite(value: float, default: float = 0.0) -> float:
+    """Coerce NaN/inf to a JSON-safe number.
+
+    Metrics like profit factor are infinite when there are no losing trades, and
+    Sharpe is NaN with too few returns; both break JSON serialization (and the
+    dashboard panel) unless sanitised.
+    """
+    import math
+
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return default
+    return value if math.isfinite(value) else default
 
 
 __all__ = ["router"]

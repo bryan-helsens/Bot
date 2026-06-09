@@ -296,15 +296,18 @@ class BinanceSpotGateway(ExchangeGateway):
         balances = await self._fetch_balances()
         quote = self._settings.quote_asset
         available = balances.get(quote, Balance(asset=quote)).free
-        # Equity = quote balance + base-asset holdings valued at last price. Valuing
-        # base holdings (best-effort) means a session started already holding coins
-        # seeds the risk drawdown/sizing baseline at true value, not just cash.
+        # Equity = quote balance + base-asset holdings valued at last price. Only
+        # value assets we actually TRADE (the configured symbols) — testnet wallets
+        # are pre-funded with dozens of junk assets, and pricing every one would
+        # fire dozens of ticker calls and stall startup. This keeps it bounded.
         equity = sum((b.total for b in balances.values() if b.asset == quote), Decimal("0"))
+        configured = set(self._settings.symbols)
         for bal in balances.values():
-            if bal.asset == quote or bal.total <= 0:
+            pair = f"{bal.asset}{quote}"
+            if bal.asset == quote or bal.total <= 0 or pair not in configured:
                 continue
             try:
-                ticker = await self.get_ticker(f"{bal.asset}{quote}")
+                ticker = await self.get_ticker(pair)
                 equity += bal.total * ticker.last_price
             except Exception as exc:  # noqa: BLE001 - unpriceable asset: skip its value
                 self.log.debug("equity_valuation_skip", asset=bal.asset, error=str(exc))

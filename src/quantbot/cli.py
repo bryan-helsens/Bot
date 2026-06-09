@@ -170,6 +170,139 @@ def serve(
 
 
 # ---------------------------------------------------------------------------
+# demo (dashboard with synthetic live activity — no network)
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def demo(
+    host: Annotated[str, typer.Option(help="API bind host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="API bind port")] = 8000,
+) -> None:
+    """Serve the dashboard with SYNTHETIC live activity to check every panel.
+
+    No exchange, no network: seeds a portfolio with closed trades, open positions
+    and an equity curve, then keeps generating trades/price moves so the dashboard
+    (equity curve, PnL, positions, closed trades, risk, strategy performance) all
+    populate and update live over the WebSocket. Purely for verifying the UI.
+    """
+    import random
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    import uvicorn
+
+    from quantbot.api.app import create_app
+    from quantbot.api.dependencies import AppState
+    from quantbot.core.constants import EventType, ExitReason, Side, Timeframe
+    from quantbot.core.events import Event, EventBus
+    from quantbot.core.models import Candle  # noqa: F401 - ensure models import cleanly
+    from quantbot.portfolio.manager import PortfolioManager
+    from quantbot.portfolio.performance import PerformanceTracker
+    from quantbot.risk.engine import RiskEngine
+    from quantbot.strategies.builtin.rsi_strategy import RSIStrategy
+
+    _setup()
+    settings = get_settings()
+    console.print("[bold magenta]QuantBot DEMO[/] — synthetic data, no exchange")
+
+    rng = random.Random(7)
+    start_cap = Decimal("10000")
+    syms = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+    base = {"BTCUSDT": 65000.0, "ETHUSDT": 3200.0, "BNBUSDT": 580.0}
+
+    bus = EventBus()
+    pf = PortfolioManager(starting_balance=start_cap)
+    risk = RiskEngine(settings.risk, event_bus=bus)
+    risk.set_starting_equity(start_cap)
+    perf = PerformanceTracker(starting_equity=float(start_cap))
+
+    def _qty(sym: str, price: float) -> Decimal:
+        return Decimal(str(round(float(start_cap) * 0.02 / price, 6)))
+
+    def _open(sym: str, price: float) -> None:
+        pf.positions.open_position(
+            symbol=sym, side=Side.BUY, quantity=_qty(sym, price),
+            entry_price=Decimal(str(round(price, 2))), strategy="rsi_dip_buyer",
+            stop_loss=Decimal(str(round(price * 0.97, 2))), fee=Decimal("0"),
+        )
+        pf.update_price(sym, Decimal(str(round(price, 2))))
+
+    def _close(sym: str, price: float) -> None:
+        pf.update_price(sym, Decimal(str(round(price, 2))))
+        win = price >= float(pf.positions.get(sym).entry_price)
+        trade = pf.positions.close_position(
+            sym, exit_price=Decimal(str(round(price, 2))),
+            reason=ExitReason.TAKE_PROFIT if win else ExitReason.STOP_LOSS, fee=Decimal("0"),
+        )
+        if trade is not None:
+            pf.apply_trade(trade)
+            perf.add_trade(trade)
+            risk.limits.record_trade_pnl(trade.net_pnl)
+
+    # Seed ~25 closed trades (slightly positive bias) + an equity curve.
+    for _ in range(25):
+        sym = rng.choice(syms)
+        entry = base[sym] * (1 + rng.uniform(-0.015, 0.015))
+        _open(sym, entry)
+        _close(sym, entry * (1 + rng.uniform(-0.03, 0.05)))
+        risk.update_equity(pf.equity())
+        pf.snapshot()
+    # Leave two positions open so the Open Positions / unrealized panels fill.
+    _open("BTCUSDT", base["BTCUSDT"])
+    pf.update_price("BTCUSDT", Decimal(str(round(base["BTCUSDT"] * 1.012, 2))))
+    _open("ETHUSDT", base["ETHUSDT"])
+    pf.update_price("ETHUSDT", Decimal(str(round(base["ETHUSDT"] * 0.994, 2))))
+    pf.snapshot()
+
+    strat = RSIStrategy(
+        symbols=syms, timeframes=[Timeframe.M5, Timeframe.M15],
+        params={"period": 14, "oversold": 35, "overbought": 70},
+    )
+    state = AppState(
+        settings=settings, portfolio=pf, risk_engine=risk, performance=perf,
+        trading_engine=SimpleNamespace(running=True), strategies=[strat],
+    )
+    application = create_app(settings=settings, state=state, event_bus=bus)
+
+    async def _live_activity() -> None:
+        while True:
+            await asyncio.sleep(2.5)
+            for p in list(pf.positions.all_open()):
+                cur = float(pf.price_of(p.symbol) or p.entry_price)
+                pf.update_price(p.symbol, Decimal(str(round(cur * (1 + rng.uniform(-0.004, 0.005)), 2))))
+            if rng.random() < 0.5 and pf.positions.all_open():
+                p = rng.choice(list(pf.positions.all_open()))
+                _close(p.symbol, float(pf.price_of(p.symbol) or p.entry_price))
+                await bus.publish(Event(EventType.TRADE_CLOSED, payload={"symbol": p.symbol}, source="demo"))
+            while len(pf.positions.all_open()) < 2:
+                sym = rng.choice(syms)
+                if pf.positions.get(sym) and pf.positions.get(sym).is_open:
+                    break
+                _open(sym, base[sym] * (1 + rng.uniform(-0.01, 0.01)))
+                await bus.publish(Event(EventType.TRADE_OPENED, payload={"symbol": sym}, source="demo"))
+            risk.update_equity(pf.equity())
+            pf.snapshot()
+            await bus.publish(Event(EventType.TICKER_UPDATE, payload={"equity": float(pf.equity())}, source="demo"))
+
+    async def _serve() -> None:
+        config = uvicorn.Config(application, host=host, port=port, log_level=settings.log_level.lower())
+        server = uvicorn.Server(config)
+        server_task = asyncio.create_task(server.serve())
+        activity_task = asyncio.create_task(_live_activity())
+        console.print(f"[green]Demo dashboard on[/] http://{host}:{port}  (point the UI at it)")
+        try:
+            await server_task
+        finally:
+            activity_task.cancel()
+
+    try:
+        asyncio.run(_serve())
+    except KeyboardInterrupt:  # pragma: no cover
+        console.print("\n[yellow]Demo stopped[/]")
+
+
+# ---------------------------------------------------------------------------
 # backtest
 # ---------------------------------------------------------------------------
 
