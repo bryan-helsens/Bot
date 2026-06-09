@@ -134,6 +134,72 @@ class OrderExecutor(LoggerMixin):
             # locally on each price tick as a backstop.
             self.log.error("stop_order_failed", symbol=position.symbol, error=str(exc))
 
+    async def _resize_protective_stop(self, position: Position) -> None:
+        """Re-place the resting stop for the (reduced) remaining quantity.
+
+        After a partial take-profit the original stop order still covers the full
+        entry quantity. Cancel it and place a fresh one sized to what is left so the
+        exchange-side stop matches the position and cannot over-sell.
+        """
+        await self._cancel_stop(position)
+        position.meta.pop("stop_order_id", None)
+        await self._place_protective_stop(position)
+
+    # ------------------------------------------------------------------ partial exit
+
+    async def reduce_position(
+        self, position: Position, *, fraction: Decimal, exit_price: Decimal | None = None,
+        reason=None, tp_index: int | None = None,
+    ) -> Order | None:
+        """Place a partial reduce (e.g. a take-profit rung) and update the books.
+
+        Mirrors :meth:`close_position` but for a fraction of the position. Crucially
+        it places a *real* reduce-only order through the gateway before updating the
+        internal position — the engine must never reduce its books without the
+        matching exchange order, or the bot's view and the real holding diverge.
+        """
+        from quantbot.core.constants import ExitReason
+
+        reason = reason or ExitReason.TAKE_PROFIT
+        fraction = max(Decimal("0"), min(Decimal("1"), fraction))
+        close_qty = position.quantity * fraction
+        if close_qty <= 0:
+            return None
+        exit_side = Side.SELL if position.side.sign > 0 else Side.BUY
+        request = OrderRequest(
+            symbol=position.symbol, side=exit_side, type=OrderType.MARKET,
+            quantity=close_qty, reduce_only=True,
+        )
+        try:
+            order = await self._gateway.create_order(request)
+        except ExchangeError as exc:
+            self.log.error("reduce_order_failed", symbol=position.symbol, error=str(exc))
+            raise ExecutionError(f"Reduce order failed: {exc}") from exc
+
+        self._orders.track(order)
+        fill_price = order.avg_fill_price or exit_price or position.entry_price
+        fee = fill_price * close_qty * self._commission_rate
+        trade = self._portfolio.positions.reduce_position(
+            position.symbol, fraction=fraction, exit_price=fill_price, reason=reason,
+            fee=fee, tp_index=tp_index,
+        )
+        if trade is not None:
+            self._portfolio.apply_trade(trade)
+            self._risk.record_trade_result(position, trade.net_pnl)
+            held = self._portfolio.positions.get(position.symbol)
+            if held is not None and held.is_open:
+                await self._resize_protective_stop(held)
+            else:
+                await self._cancel_stop(position)  # the reduce fully closed it
+            await self._emit(EventType.TRADE_CLOSED, {
+                "symbol": trade.symbol,
+                "net_pnl": str(trade.net_pnl),
+                "exit_price": str(trade.exit_price),
+                "reason": reason.value,
+                "partial": True,
+            })
+        return order
+
     # ------------------------------------------------------------------ exit
 
     async def close_position(

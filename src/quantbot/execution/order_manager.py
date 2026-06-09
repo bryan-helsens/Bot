@@ -100,7 +100,9 @@ class OrderManager(LoggerMixin):
         if update.avg_fill_price is not None:
             local.avg_fill_price = update.avg_fill_price
         if update.commission > 0:
-            local.commission = update.commission
+            # Accumulate across partial-fill events; an order's total commission is
+            # the sum of each fill's, not just the most recent one.
+            local.commission += update.commission
         local.touch()
 
         if local.status.is_terminal:

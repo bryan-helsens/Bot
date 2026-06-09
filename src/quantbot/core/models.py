@@ -371,8 +371,14 @@ class Position(_Base):
         return (ref - self.entry_price) * self.quantity * self.side.sign
 
     def notional(self, price: Decimal | None = None) -> Decimal:
-        """Position notional value at *price* (defaults to entry price)."""
-        ref = price if price is not None else self.entry_price
+        """Position notional value at *price* (defaults to mark price, then entry).
+
+        Defaulting to the current mark price (like :meth:`unrealized_pnl`) means
+        exposure/risk-limit checks measure CURRENT value, not entry cost — so a
+        position that has run up cannot silently push the portfolio past its
+        exposure cap.
+        """
+        ref = price if price is not None else (self.mark_price or self.entry_price)
         return ref * self.quantity
 
     @property

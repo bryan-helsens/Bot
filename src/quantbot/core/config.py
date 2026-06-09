@@ -317,6 +317,11 @@ class Settings(BaseSettings):
     log_format: LogFormat = LogFormat.CONSOLE
     timezone: str = "UTC"
     trading_mode: TradingMode = TradingMode.PAPER
+    # Safety interlock for REAL-money live trading. Live mode currently lacks
+    # exchange-fill reconciliation (see docs/LIVE_SAFETY.md); paper/testnet is safe,
+    # but the runtime refuses to start LIVE mode unless this is explicitly set true,
+    # so a config slip can never put real money at risk by accident.
+    allow_live_real_orders: bool = False
 
     symbols: CsvStrList = Field(default_factory=lambda: ["BTCUSDT"])
     timeframes: CsvTimeframeList = Field(default_factory=lambda: [Timeframe.H1])

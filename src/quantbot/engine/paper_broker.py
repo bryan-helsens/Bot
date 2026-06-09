@@ -16,6 +16,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from quantbot.core.constants import MarketType, OrderStatus, OrderType, Side
+from quantbot.core.exceptions import ExchangeError
 from quantbot.core.logging import LoggerMixin
 from quantbot.core.models import (
     Balance,
@@ -61,7 +62,9 @@ class PaperTradingBroker(ExchangeGateway):
     def _price(self, symbol: str) -> Decimal:
         price = self._prices.get(symbol)
         if price is None:
-            raise KeyError(f"No price known for {symbol}; feed_price() first")
+            # Raise a typed ExchangeError (not a bare KeyError) so the executor's
+            # error handling catches it instead of letting it crash the candle loop.
+            raise ExchangeError(f"No price known for {symbol}; feed_price() first")
         return price
 
     # ------------------------------------------------------------------ lifecycle (delegate)

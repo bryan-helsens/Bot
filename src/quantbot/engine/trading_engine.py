@@ -130,6 +130,12 @@ class TradingEngine(LoggerMixin):
         # 2. Manage an existing position before considering new entries.
         await self._manage_position(symbol, price)
 
+        # 2b. Refresh equity-derived risk state (drawdown high-water mark and the
+        #     emergency stop) on EVERY candle — not only on the 60s snapshot timer —
+        #     so a fast drawdown halts new entries immediately rather than up to a
+        #     minute late.
+        self._risk.update_equity(self._portfolio.equity())
+
         # 3. Run strategies and aggregate their signals.
         signals = await self._run_strategies(candle)
         if not signals:
@@ -216,16 +222,13 @@ class TradingEngine(LoggerMixin):
         if decision.exit_fraction >= Decimal("1"):
             await self._executor.close_position(position, exit_price=price, reason=decision.exit_reason)
         else:
-            # Partial take-profit: reduce the position locally.
-            trade = self._portfolio.positions.reduce_position(
-                symbol, fraction=decision.exit_fraction, exit_price=price,
+            # Partial take-profit: place a REAL reduce order through the executor.
+            # Reducing the books locally (without an order) would desync the bot's
+            # view from the actual exchange holding — a live-trading hazard.
+            await self._executor.reduce_position(
+                position, fraction=decision.exit_fraction, exit_price=price,
                 reason=decision.exit_reason, tp_index=decision.triggered_tp_index,
             )
-            if trade is not None:
-                self._portfolio.apply_trade(trade)
-                self._risk.record_trade_result(position, trade.net_pnl)
-                if isinstance(self._gateway, PaperTradingBroker):
-                    self._gateway.apply_pnl(trade.net_pnl)
 
     async def _flatten_all(self) -> None:
         for position in list(self._portfolio.positions.all_open()):
