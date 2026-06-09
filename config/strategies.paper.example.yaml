@@ -21,8 +21,22 @@ strategies:
     class: RSIStrategy
     market: spot
     enabled: true
-    # Binance SPOT testnet reliably lists these; add more once confirmed available.
-    symbols: [BTCUSDT, ETHUSDT, BNBUSDT]
+    # A broad mix: large-caps + meme coins + low-priced coins, for varied testing.
+    # The engine SKIPS any symbol the testnet doesn't list (logged as
+    # warmup_skip_symbol) and trades the rest, so it's safe to include extras.
+    symbols:
+      - BTCUSDT    # large
+      - ETHUSDT
+      - BNBUSDT
+      - SOLUSDT
+      - XRPUSDT    # low-priced
+      - ADAUSDT
+      - TRXUSDT    # low-priced
+      - LTCUSDT
+      - DOGEUSDT   # meme
+      - SHIBUSDT   # meme / sub-cent
+      - PEPEUSDT   # meme / sub-cent
+      - FLOKIUSDT  # meme / sub-cent
     timeframes: [5m, 15m]
     params:
       period: 14

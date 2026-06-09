@@ -129,6 +129,7 @@ class MarketDataService(LoggerMixin):
         self._warmup = warmup
         self._series: dict[tuple[str, Timeframe], CandleSeries] = {}
         self._tasks: list[asyncio.Task[None]] = []
+        self._active: list[tuple[str, Timeframe]] = []
         self._running = False
 
     # ------------------------------------------------------------------ access
@@ -154,31 +155,47 @@ class MarketDataService(LoggerMixin):
     # ------------------------------------------------------------------ lifecycle
 
     async def warmup(self, symbols: Iterable[str], timeframes: Iterable[Timeframe]) -> None:
-        """Pre-fill buffers from REST history for every symbol/timeframe."""
+        """Pre-fill buffers from REST history for every symbol/timeframe.
+
+        Resilient per symbol: a pair the exchange doesn't list (common when a
+        configured meme/low-cap coin isn't on the testnet) is logged and SKIPPED
+        instead of crashing startup. Only pairs that returned data are recorded in
+        :attr:`_active` and get a live consumer.
+        """
+        self._active = []
         for symbol in symbols:
             for timeframe in timeframes:
-                candles = await self._gateway.get_klines(
-                    symbol, timeframe, limit=self._warmup
-                )
+                try:
+                    candles = await self._gateway.get_klines(
+                        symbol, timeframe, limit=self._warmup
+                    )
+                except Exception as exc:  # noqa: BLE001 - skip unavailable symbol, keep the rest
+                    self.log.warning(
+                        "warmup_skip_symbol", symbol=symbol,
+                        timeframe=timeframe.value, error=str(exc),
+                    )
+                    continue
                 series = self.series(symbol, timeframe)
                 added = series.extend(candles)
+                self._active.append((symbol, timeframe))
                 self.log.debug(
                     "warmup_loaded", symbol=symbol, timeframe=timeframe.value, candles=added
                 )
+        if not self._active:
+            self.log.warning("warmup_no_active_symbols")
 
     async def start(self, symbols: Iterable[str], timeframes: Iterable[Timeframe]) -> None:
-        """Warm up and begin consuming live candle streams."""
+        """Warm up and begin consuming live candle streams (skipping bad symbols)."""
         symbols = list(symbols)
         timeframes = list(timeframes)
         await self.warmup(symbols, timeframes)
         self._running = True
-        for symbol in symbols:
-            for timeframe in timeframes:
-                task = asyncio.create_task(
-                    self._consume(symbol, timeframe),
-                    name=f"md:{symbol}:{timeframe.value}",
-                )
-                self._tasks.append(task)
+        for symbol, timeframe in self._active:
+            task = asyncio.create_task(
+                self._consume(symbol, timeframe),
+                name=f"md:{symbol}:{timeframe.value}",
+            )
+            self._tasks.append(task)
         self.log.info("market_data_started", series=len(self._tasks))
 
     async def stop(self) -> None:
@@ -197,16 +214,23 @@ class MarketDataService(LoggerMixin):
     async def _consume(self, symbol: str, timeframe: Timeframe) -> None:
         """Consume a single live candle stream into its buffer."""
         series = self.series(symbol, timeframe)
-        async for candle in self._gateway.stream_klines(symbol, timeframe):
-            is_new = series.append(candle)
-            if not is_new:
-                continue
-            if series.has_gap():
-                self.log.warning(
-                    "candle_gap_detected", symbol=symbol, timeframe=timeframe.value
-                )
-                await self._backfill(series)
-            await self._publish_candle(candle)
+        try:
+            async for candle in self._gateway.stream_klines(symbol, timeframe):
+                is_new = series.append(candle)
+                if not is_new:
+                    continue
+                if series.has_gap():
+                    self.log.warning(
+                        "candle_gap_detected", symbol=symbol, timeframe=timeframe.value
+                    )
+                    await self._backfill(series)
+                await self._publish_candle(candle)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - one stream dying must not crash others
+            self.log.warning(
+                "stream_consume_failed", symbol=symbol, timeframe=timeframe.value, error=str(exc)
+            )
 
     async def _backfill(self, series: CandleSeries) -> None:
         """Refetch recent history to repair a detected gap."""
