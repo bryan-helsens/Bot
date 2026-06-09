@@ -89,6 +89,71 @@ def api(
 
 
 # ---------------------------------------------------------------------------
+# serve (engine + dashboard API in one process)
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option(help="API bind host")] = "",
+    port: Annotated[int, typer.Option(help="API bind port")] = 0,
+) -> None:
+    """Run the trading engine AND the dashboard API together in ONE process.
+
+    This is how you use the dashboard with a live bot: the API shares the running
+    engine's in-memory state, so the panels show real data and the WebSocket pushes
+    live updates. (Running ``quantbot api`` separately would show empty data — a
+    different process can't see the engine's state.)
+    """
+    _setup()
+    settings = get_settings()
+    console.print(
+        f"[bold green]Starting QuantBot[/] (engine + dashboard) in "
+        f"[cyan]{settings.trading_mode.value}[/] mode"
+    )
+    import uvicorn
+
+    from quantbot.api.app import create_app
+    from quantbot.api.dependencies import AppState
+    from quantbot.engine.runtime import build_runtime
+
+    runtime = build_runtime(settings)
+    state = AppState(
+        settings=settings,
+        portfolio=runtime.portfolio,
+        risk_engine=runtime.risk_engine,
+        trading_engine=runtime.engine,
+        strategies=runtime.strategies,
+    )
+    application = create_app(settings=settings, state=state, event_bus=runtime.event_bus)
+
+    async def _serve() -> None:
+        config = uvicorn.Config(
+            application,
+            host=host or settings.api.host,
+            port=port or settings.api.port,
+            log_level=settings.log_level.lower(),
+        )
+        server = uvicorn.Server(config)
+        await runtime.gateway.connect()
+        await runtime.engine.start()
+        console.print(
+            f"[green]Dashboard API on[/] http://{host or settings.api.host}:"
+            f"{port or settings.api.port}  (docs at /docs)"
+        )
+        try:
+            await server.serve()  # blocks until Ctrl-C / SIGTERM
+        finally:
+            await runtime.engine.stop()
+            await runtime.gateway.close()
+
+    try:
+        asyncio.run(_serve())
+    except KeyboardInterrupt:  # pragma: no cover
+        console.print("\n[yellow]Shutdown requested[/]")
+
+
+# ---------------------------------------------------------------------------
 # backtest
 # ---------------------------------------------------------------------------
 
