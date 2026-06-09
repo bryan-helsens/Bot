@@ -78,6 +78,13 @@ _ORDER_TYPE_TO_BINANCE: dict[OrderType, str] = {
     OrderType.TAKE_PROFIT_LIMIT: "TAKE_PROFIT_LIMIT",
     OrderType.TRAILING_STOP: "TAKE_PROFIT",  # spot has no native trailing; emulated
 }
+# Spot order types that take price + timeInForce. The market-stop variants
+# (STOP_LOSS, TAKE_PROFIT) take only stopPrice — sending timeInForce is rejected.
+_SPOT_LIMIT_STYLE = frozenset({
+    OrderType.LIMIT,
+    OrderType.STOP_LOSS_LIMIT,
+    OrderType.TAKE_PROFIT_LIMIT,
+})
 _BINANCE_TO_STATUS: dict[str, OrderStatus] = {
     "NEW": OrderStatus.NEW,
     "PARTIALLY_FILLED": OrderStatus.PARTIALLY_FILLED,
@@ -364,7 +371,11 @@ class BinanceSpotGateway(ExchangeGateway):
         }
         if request.client_order_id:
             params["newClientOrderId"] = request.client_order_id
-        if request.type not in (OrderType.MARKET,):
+        # Only LIMIT-style spot orders take price + timeInForce. The market-stop
+        # types (STOP_LOSS / TAKE_PROFIT) take only stopPrice — sending timeInForce
+        # for them is rejected with -1106 ("sent when not required"), which was
+        # making every protective stop placement fail.
+        if request.type in _SPOT_LIMIT_STYLE:
             if request.price is not None:
                 params["price"] = _fmt(info.round_price(request.price))
             params["timeInForce"] = request.time_in_force.value.upper()
