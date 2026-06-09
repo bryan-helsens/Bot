@@ -85,16 +85,20 @@ def build_runtime(
     """Assemble a :class:`Runtime` from *settings*."""
     settings = settings or get_settings()
 
-    # Safety interlock: LIVE mode places REAL orders. The critical live-path bugs
-    # are fixed (exchange-fill reconciliation, futures order types, over-sell
-    # protection — see docs/LIVE_SAFETY.md), but real money should still require a
-    # deliberate opt-in so a stray TRADING_MODE=live can never trade by accident.
-    # Validate on the testnet first, then set ALLOW_LIVE_REAL_ORDERS=true.
-    if settings.trading_mode is TradingMode.LIVE and not settings.allow_live_real_orders:
+    # Safety interlock: only REAL-money live trading (LIVE on mainnet) needs an
+    # explicit opt-in. LIVE on the testnet is fake money, so it runs freely — that
+    # is the realistic "test on real amounts" path. The critical live-path bugs are
+    # fixed (see docs/LIVE_SAFETY.md); the opt-in just stops a stray
+    # TRADING_MODE=live from touching real funds by accident.
+    if (
+        settings.trading_mode is TradingMode.LIVE
+        and not settings.binance.testnet
+        and not settings.allow_live_real_orders
+    ):
         raise RuntimeError(
-            "LIVE trading requires an explicit opt-in. Validate on the testnet with "
-            "TRADING_MODE=paper first (see docs/LIVE_SAFETY.md), then set "
-            "ALLOW_LIVE_REAL_ORDERS=true to trade real money."
+            "LIVE trading on MAINNET (real money) requires an explicit opt-in. "
+            "Validate on the testnet first (BINANCE__TESTNET=true, see "
+            "docs/LIVE_SAFETY.md), then set ALLOW_LIVE_REAL_ORDERS=true for mainnet."
         )
 
     bus = event_bus or EventBus()
