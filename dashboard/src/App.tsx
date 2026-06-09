@@ -3,6 +3,7 @@ import { api } from "./api/client";
 import { ClosedTrades } from "./components/ClosedTrades";
 import { DrawdownChart } from "./components/DrawdownChart";
 import { EquityCurve } from "./components/EquityCurve";
+import { ManualTrade } from "./components/ManualTrade";
 import { OpenPositions } from "./components/OpenPositions";
 import { PnLPanel } from "./components/PnLPanel";
 import { RiskStats } from "./components/RiskStats";
@@ -62,6 +63,10 @@ export function App() {
 
         <div className="col-12">
           <DrawdownChart />
+        </div>
+
+        <div className="col-12">
+          <ManualTrade />
         </div>
 
         <div className="col-6">

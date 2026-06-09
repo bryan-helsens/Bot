@@ -22,6 +22,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class TestOrderRequest(BaseModel):
+    """A manual test order from the dashboard (buy/sell a symbol at market)."""
+
+    symbol: str
+    side: str  # "buy" | "sell"
+
+
 class HealthResponse(BaseModel):
     """Service health summary."""
 

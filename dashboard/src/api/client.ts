@@ -51,6 +51,11 @@ export const api = {
     request<{ detail: string; ok: boolean }>("/system/emergency-stop", { method: "POST" }),
   resume: () =>
     request<{ detail: string; ok: boolean }>("/system/resume", { method: "POST" }),
+  testOrder: (symbol: string, side: "buy" | "sell") =>
+    request<{ detail: string; ok: boolean }>("/system/test-order", {
+      method: "POST",
+      body: JSON.stringify({ symbol, side }),
+    }),
   login: (username: string, password: string) =>
     request<{ access_token: string; token_type: string; expires_in: number }>(
       "/auth/login",

@@ -28,12 +28,13 @@ from quantbot.core.constants import (
     MarketType,
     PositionSide,
     Side,
+    SignalType,
     Timeframe,
     TradingMode,
 )
 from quantbot.core.events import Event, EventBus
 from quantbot.core.logging import LoggerMixin
-from quantbot.core.models import Candle, Position
+from quantbot.core.models import Candle, Position, Signal
 from quantbot.data.market_data import MarketDataService
 from quantbot.engine.paper_broker import PaperTradingBroker
 from quantbot.exchanges.base import ExchangeGateway, OrderUpdate
@@ -205,6 +206,52 @@ class TradingEngine(LoggerMixin):
         if last is None or np.isnan(last) or last <= 0:
             return candle.range or None
         return Decimal(str(float(last)))
+
+    # ------------------------------------------------------------------ manual / test orders
+
+    def _latest_price(self, symbol: str) -> Decimal | None:
+        """Most recent known price for *symbol* (latest candle, then mark price)."""
+        for timeframe in self._settings.timeframes:
+            series = self._market_data.series(symbol, timeframe)
+            if series.last is not None:
+                return series.last.close
+        return self._portfolio.price_of(symbol)
+
+    async def submit_manual_order(self, symbol: str, side: Side) -> dict:
+        """Place a manual market order through the FULL risk + execution path.
+
+        Used by the dashboard's test button to exercise the whole pipeline on
+        demand (no waiting for a strategy signal). A buy opens a long; a sell closes
+        an open long (or opens a short on futures). Goes through the RiskEngine like
+        any other order — it can be adjusted or rejected.
+        """
+        price = self._latest_price(symbol)
+        if price is None or price <= 0:
+            return {"ok": False, "detail": f"No live price for {symbol} yet — wait for data."}
+
+        held = self._portfolio.positions.get(symbol)
+        if held is not None and held.is_open:
+            opposes = (
+                side is Side.SELL and held.side is PositionSide.LONG
+            ) or (side is Side.BUY and held.side is PositionSide.SHORT)
+            if opposes:
+                await self._executor.close_position(held, exit_price=price, reason=ExitReason.MANUAL)
+                return {"ok": True, "detail": f"Closed {symbol} @ {price}"}
+            return {"ok": False, "detail": f"Already holding {symbol}; opposite side closes it."}
+
+        if side is Side.SELL and self._gateway.market is not MarketType.FUTURES:
+            return {"ok": False, "detail": f"No {symbol} position to sell (spot)."}
+
+        signal = Signal(
+            strategy="manual", symbol=symbol,
+            timeframe=self._settings.timeframes[0] if self._settings.timeframes else Timeframe.M5,
+            side=side, signal_type=SignalType.ENTRY, strength=1.0, price=price,
+            reason="manual_test",
+        )
+        position = await self._executor.execute_signal(signal, atr=None)
+        if position is None:
+            return {"ok": False, "detail": f"{symbol} {side.value} rejected by risk engine (see logs)."}
+        return {"ok": True, "detail": f"Opened {symbol} {side.value} {position.quantity} @ {position.entry_price}"}
 
     async def _run_strategies(self, candle: Candle) -> list:
         """Build a context and evaluate every strategy matching this candle."""

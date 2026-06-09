@@ -178,3 +178,32 @@ async def test_emergency_stop_blocks_all_orders(make_candle) -> None:
 
     assert not portfolio.positions.has_position("BTCUSDT"), "no position while halted"
     assert placed == [], "a kill-switched engine must place no exchange orders"
+
+
+async def test_manual_order_opens_then_closes_via_full_path(make_candle) -> None:
+    """The dashboard test button opens a position on Buy and closes it on Sell."""
+    settings = _settings(take_profit_levels=[(Decimal("0.10"), Decimal("1.0"))])
+    engine, portfolio, broker, placed, market_data = _wire(settings, _BuyOnceAt3(
+        symbols=["BTCUSDT"], timeframes=[Timeframe.H1]))
+    series = market_data.series("BTCUSDT", Timeframe.H1)
+    for i, price in enumerate([100, 100, 100, 100]):
+        candle = make_candle(i, price)
+        series.append(candle)
+        broker.feed_price("BTCUSDT", candle.close)
+
+    buy = await engine.submit_manual_order("BTCUSDT", Side.BUY)
+    assert buy["ok"] is True
+    assert portfolio.positions.has_position("BTCUSDT")
+    assert any(o.side is Side.BUY and o.type is OrderType.MARKET for o in placed)
+
+    sell = await engine.submit_manual_order("BTCUSDT", Side.SELL)
+    assert sell["ok"] is True
+    assert not portfolio.positions.has_position("BTCUSDT")
+
+
+async def test_manual_order_without_price_is_rejected() -> None:
+    settings = _settings(take_profit_levels=[(Decimal("0.10"), Decimal("1.0"))])
+    engine, _portfolio, _broker, _placed, _md = _wire(settings, _BuyOnceAt3(
+        symbols=["BTCUSDT"], timeframes=[Timeframe.H1]))
+    result = await engine.submit_manual_order("BTCUSDT", Side.BUY)  # no candles fed
+    assert result["ok"] is False

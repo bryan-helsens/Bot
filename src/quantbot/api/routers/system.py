@@ -12,6 +12,7 @@ from quantbot.api.schemas import (
     LoginRequest,
     MessageResponse,
     SystemStatusSchema,
+    TestOrderRequest,
     TokenResponse,
 )
 from quantbot import __version__
@@ -83,6 +84,29 @@ async def resume(state: StateDep, _: AuthDep) -> MessageResponse:
     state.risk_engine.emergency.reset()
     state.risk_engine.circuit_breaker.reset()
     return MessageResponse(detail="Trading resumed")
+
+
+@router.post("/system/test-order", response_model=MessageResponse, tags=["system"])
+async def test_order(req: TestOrderRequest, state: StateDep, _: AuthDep) -> MessageResponse:
+    """Manually place a test buy/sell through the full risk + execution path.
+
+    A buy opens a position, a sell closes it (or opens a short on futures). Goes
+    through the RiskEngine like any real order. Requires the live engine
+    (``quantbot serve``); not available in demo mode.
+    """
+    from quantbot.core.constants import Side
+
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "submit_manual_order"):
+        return MessageResponse(
+            detail="Manual orders need the live engine (run `quantbot serve`).", ok=False
+        )
+    try:
+        side = Side(req.side.strip().lower())
+    except ValueError:
+        return MessageResponse(detail=f"Invalid side '{req.side}' (use buy/sell)", ok=False)
+    result = await engine.submit_manual_order(req.symbol.strip().upper(), side)
+    return MessageResponse(detail=result["detail"], ok=bool(result["ok"]))
 
 
 __all__ = ["router"]

@@ -127,6 +127,38 @@ th { color: var(--muted); font-weight: 500; }
 .btn:hover { border-color: var(--accent); }
 .btn.danger { border-color: var(--red); color: var(--red); }
 
+.manual-trade {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.manual-trade select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  min-width: 140px;
+}
+.btn-buy, .btn-sell {
+  border: 1px solid var(--border);
+  background: transparent;
+  padding: 6px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn-buy { color: var(--green, #3ddc84); border-color: var(--green, #3ddc84); }
+.btn-sell { color: var(--red); border-color: var(--red); }
+.btn-buy:disabled, .btn-sell:disabled { opacity: 0.5; cursor: default; }
+.note { margin-top: 10px; font-size: 13px; }
+.note.ok { color: var(--green, #3ddc84); }
+.note.err { color: var(--red); }
+.hint { margin-top: 8px; font-size: 11px; color: var(--muted); }
+
 .error {
   color: var(--red);
   font-size: 12px;
