@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { api } from "./api/client";
+import { Balances } from "./components/Balances";
 import { ClosedTrades } from "./components/ClosedTrades";
 import { DrawdownChart } from "./components/DrawdownChart";
 import { EquityCurve } from "./components/EquityCurve";
@@ -65,7 +66,10 @@ export function App() {
           <DrawdownChart />
         </div>
 
-        <div className="col-12">
+        <div className="col-6">
+          <Balances portfolio={portfolio} positions={positions ?? []} />
+        </div>
+        <div className="col-6">
           <ManualTrade />
         </div>
 

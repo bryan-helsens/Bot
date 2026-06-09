@@ -101,6 +101,11 @@ body {
 
 .pos { color: var(--green); }
 .neg { color: var(--red); }
+.muted { color: var(--muted); }
+tr.total th, tr.total td {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
 
 table {
   width: 100%;
