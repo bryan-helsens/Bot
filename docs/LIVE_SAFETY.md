@@ -47,12 +47,16 @@ Geborgd door tests: `tests/integration/test_live_reconciliation.py` (gevuurde st
 sluit positie zonder nieuwe order; stale positie wordt gereconcilieerd),
 `tests/unit/test_futures_orders.py`, `tests/unit/test_spot_reduce_clamp.py`.
 
-## Kleinere resterende punten (niet blokkerend; paper dekt ze af)
+## Kleinere resterende punten
 
-| # | Punt | Impact | Aanpak |
-|---|------|--------|--------|
-| 9 | Spot account-equity telt alleen de quote-balans (negeert basis-holdings) | Alleen verkeerde **start**-baseline áls je met basis-assets begint; runtime-equity is PnL-based en klopt. Start je flat (alleen USDT), dan geen probleem | Optioneel: basis-holdings tegen laatste prijs meewaarderen |
-| 11 | ATR-proxy is één candle high-low i.p.v. echte ATR | Sizing-kwaliteit op rustige bars | Optioneel: ATR uit de serie berekenen |
+*(Geen meer — onderstaande zijn nu ook gefixt.)*
+
+| # | Punt | Status |
+|---|------|:------:|
+| 9 | Spot account-equity telde alleen de quote-balans (negeerde basis-holdings) | ✅ basis-holdings worden tegen laatste prijs meegewaardeerd in `get_account` (en `get_balance` blijft goedkoop) |
+| 11 | ATR-proxy was één candle high-low i.p.v. echte ATR | ✅ `TradingEngine._atr_for` gebruikt echte ATR(14) uit de serie, met fallback bij te weinig historie |
+
+Geborgd door `tests/unit/test_spot_account.py` en `tests/integration/test_engine_atr.py`.
 
 > Aanbevolen volgorde: weken **paper op testnet** → bevestig dat fills, stops en
 > reconciliatie zich gedragen → pas dan `ALLOW_LIVE_REAL_ORDERS=true` met minimaal

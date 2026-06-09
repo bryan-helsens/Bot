@@ -172,9 +172,32 @@ class TradingEngine(LoggerMixin):
         if result.signal.side is Side.SELL and self._gateway.market is not MarketType.FUTURES:
             return None
 
-        atr = candle.range or None
+        atr = self._atr_for(candle)
         position = await self._executor.execute_signal(result.signal, atr=atr)
         return position
+
+    def _atr_for(self, candle: Candle) -> Decimal | None:
+        """True ATR(14) from the series for volatility sizing.
+
+        Falls back to the single-candle range only when there is too little history
+        (a one-bar high-low is a noisy, usually-too-small volatility estimate that
+        produces oversized positions on quiet bars).
+        """
+        series = self._market_data.series(candle.symbol, candle.timeframe)
+        if len(series) < 16:
+            return candle.range or None
+        import numpy as np
+
+        from quantbot.indicators.volatility import atr as atr_fn
+
+        try:
+            values = atr_fn(series.highs(), series.lows(), series.closes(), period=14)
+        except Exception:  # noqa: BLE001 - any indicator failure -> safe fallback
+            return candle.range or None
+        last = values[-1]
+        if last is None or np.isnan(last) or last <= 0:
+            return candle.range or None
+        return Decimal(str(float(last)))
 
     async def _run_strategies(self, candle: Candle) -> list:
         """Build a context and evaluate every strategy matching this candle."""

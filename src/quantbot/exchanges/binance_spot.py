@@ -279,7 +279,8 @@ class BinanceSpotGateway(ExchangeGateway):
 
     # ------------------------------------------------------------------ account
 
-    async def get_account(self) -> AccountInfo:
+    async def _fetch_balances(self) -> dict[str, Balance]:
+        """Raw, cheap balance fetch (no price valuation) — used by get_balance."""
         data = await self._request(
             "GET", f"{self._api_prefix}/account", weight=20, signed=True
         )
@@ -289,9 +290,24 @@ class BinanceSpotGateway(ExchangeGateway):
             locked = to_decimal(bal["locked"])
             if free > 0 or locked > 0:
                 balances[bal["asset"]] = Balance(asset=bal["asset"], free=free, locked=locked)
+        return balances
+
+    async def get_account(self) -> AccountInfo:
+        balances = await self._fetch_balances()
         quote = self._settings.quote_asset
         available = balances.get(quote, Balance(asset=quote)).free
+        # Equity = quote balance + base-asset holdings valued at last price. Valuing
+        # base holdings (best-effort) means a session started already holding coins
+        # seeds the risk drawdown/sizing baseline at true value, not just cash.
         equity = sum((b.total for b in balances.values() if b.asset == quote), Decimal("0"))
+        for bal in balances.values():
+            if bal.asset == quote or bal.total <= 0:
+                continue
+            try:
+                ticker = await self.get_ticker(f"{bal.asset}{quote}")
+                equity += bal.total * ticker.last_price
+            except Exception as exc:  # noqa: BLE001 - unpriceable asset: skip its value
+                self.log.debug("equity_valuation_skip", asset=bal.asset, error=str(exc))
         return AccountInfo(
             balances=balances,
             positions=[],
@@ -301,8 +317,8 @@ class BinanceSpotGateway(ExchangeGateway):
         )
 
     async def get_balance(self, asset: str) -> Balance:
-        account = await self.get_account()
-        return account.balance_of(asset)
+        balances = await self._fetch_balances()
+        return balances.get(asset, Balance(asset=asset))
 
     async def get_positions(self, symbol: str | None = None) -> list[Position]:
         # Spot has no leveraged positions; positions are derived from balances.
