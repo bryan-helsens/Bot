@@ -35,6 +35,10 @@ class PositionManager(LoggerMixin):
         """All currently-open positions."""
         return [p for p in self._positions.values() if p.is_open]
 
+    def restore(self, positions: list[Position]) -> None:
+        """Replace tracked positions with *positions* (used by state persistence)."""
+        self._positions = {p.symbol: p for p in positions if p.is_open}
+
     def has_position(self, symbol: str) -> bool:
         return symbol in self._positions and self._positions[symbol].is_open
 

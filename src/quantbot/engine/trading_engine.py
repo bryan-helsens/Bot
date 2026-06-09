@@ -82,6 +82,16 @@ class TradingEngine(LoggerMixin):
     async def start(self) -> None:
         """Connect, warm up data, subscribe to candles and begin trading."""
         self.log.info("engine_starting", mode=self._settings.trading_mode.value)
+        # Restore persisted state (cash, positions, equity curve) so a restart
+        # resumes where it left off. Done before the risk baseline + reconcile so
+        # restored positions are checked against the exchange.
+        from quantbot.engine.state_store import load_state
+
+        if load_state(self._portfolio, self._settings.state_file):
+            self.log.info(
+                "state_restored", positions=self._portfolio.positions.open_count,
+                equity=float(self._portfolio.equity()),
+            )
         # Baseline the risk engine from the bot's OWN tracked equity — the exact
         # quantity `update_equity` feeds it later — NOT the raw exchange wallet. A
         # pre-funded testnet wallet (large faucet balance) vs the bot's configured
@@ -126,6 +136,7 @@ class TradingEngine(LoggerMixin):
         await self._market_data.stop()
         if close_positions:
             await self._flatten_all()
+        self._save_state()  # persist final state for a seamless next start
         await self._bus.publish(Event(EventType.ENGINE_STOPPED, payload={}))
         self.log.info("engine_stopped")
 
@@ -437,6 +448,7 @@ class TradingEngine(LoggerMixin):
                 equity = self._portfolio.equity()
                 self._risk.update_equity(equity)
                 snap = self._portfolio.snapshot()
+                self._save_state()
                 await self._bus.publish(
                     Event(EventType.TICKER_UPDATE, payload={"equity": float(snap.equity)}, source="engine")
                 )
@@ -444,6 +456,12 @@ class TradingEngine(LoggerMixin):
                 raise
             except Exception as exc:  # noqa: BLE001 - snapshot must never crash the engine
                 self.log.error("snapshot_error", error=str(exc))
+
+    def _save_state(self) -> None:
+        """Persist account state so a restart resumes seamlessly (best-effort)."""
+        from quantbot.engine.state_store import save_state
+
+        save_state(self._portfolio, self._settings.state_file)
 
     @property
     def running(self) -> bool:

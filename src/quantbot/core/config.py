@@ -327,6 +327,9 @@ class Settings(BaseSettings):
     timeframes: CsvTimeframeList = Field(default_factory=lambda: [Timeframe.H1])
     quote_asset: str = "USDT"
     strategies_config: str = "config/strategies.yaml"
+    # Where live/paper engine state (cash, positions, equity curve) is persisted so
+    # a restart resumes seamlessly. Empty disables persistence.
+    state_file: str = "data/state.json"
 
     binance: BinanceSettings = Field(default_factory=BinanceSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)

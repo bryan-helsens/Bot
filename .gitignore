@@ -10,6 +10,10 @@
 secrets/
 config/strategies.yaml
 
+# Runtime engine state (persisted positions/equity)
+data/state.json
+data/state.json.tmp
+
 # -----------------------------------------------------------------------------
 # Python
 # -----------------------------------------------------------------------------

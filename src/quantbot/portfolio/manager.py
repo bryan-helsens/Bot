@@ -164,6 +164,36 @@ class PortfolioManager(LoggerMixin):
         """Maximum drawdown observed across stored snapshots."""
         return max((s.drawdown for s in self._snapshots), default=Decimal("0"))
 
+    # ------------------------------------------------------------------ persistence
+
+    def export_state(self) -> dict:
+        """Serialise the full account state (for restart persistence)."""
+        return {
+            "starting_balance": str(self._starting_balance),
+            "cash": str(self._cash),
+            "realized_pnl": str(self._realized_pnl),
+            "fees_paid": str(self._fees_paid),
+            "peak_equity": str(self._peak_equity),
+            "prices": {sym: str(price) for sym, price in self._prices.items()},
+            "positions": [p.model_dump(mode="json") for p in self.positions.all_open()],
+            "snapshots": [s.model_dump(mode="json") for s in list(self._snapshots)[-2000:]],
+        }
+
+    def import_state(self, state: dict) -> None:
+        """Restore account state produced by :meth:`export_state`."""
+        from quantbot.core.models import AccountSnapshot, Position
+
+        self._starting_balance = Decimal(str(state.get("starting_balance", self._starting_balance)))
+        self._cash = Decimal(str(state["cash"]))
+        self._realized_pnl = Decimal(str(state.get("realized_pnl", "0")))
+        self._fees_paid = Decimal(str(state.get("fees_paid", "0")))
+        self._peak_equity = Decimal(str(state.get("peak_equity", state["cash"])))
+        self._prices = {sym: Decimal(str(p)) for sym, p in state.get("prices", {}).items()}
+        self.positions.restore([Position.model_validate(p) for p in state.get("positions", [])])
+        self._snapshots.clear()
+        for snap in state.get("snapshots", []):
+            self._snapshots.append(AccountSnapshot.model_validate(snap))
+
     # ------------------------------------------------------------------ risk view
 
     def risk_view(self) -> PortfolioView:

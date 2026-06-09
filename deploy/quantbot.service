@@ -1,0 +1,38 @@
+# systemd unit for running QuantBot 24/7 (engine + dashboard API) on a VPS.
+#
+# Install (edit User/paths to match your machine first):
+#   sudo cp deploy/quantbot.service /etc/systemd/system/quantbot.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now quantbot      # start now + on every boot
+#   journalctl -u quantbot -f                 # live logs
+#
+# Auto-starts on boot and auto-restarts on crash, so the bot keeps running
+# undisturbed. State (cash/positions/equity) is persisted to data/state.json, so a
+# restart resumes seamlessly.
+
+[Unit]
+Description=QuantBot trading engine + dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# --- EDIT THESE to match your machine ---
+User=bryan
+WorkingDirectory=/home/bryan/custom/Bot
+ExecStart=/home/bryan/custom/Bot/.venv/bin/quantbot serve
+# ----------------------------------------
+# pydantic-settings reads .env from WorkingDirectory automatically.
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+# Send structured logs to the journal (view with: journalctl -u quantbot)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=quantbot
+# Light hardening (optional, safe defaults)
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
