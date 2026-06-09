@@ -8,9 +8,13 @@ na een grondige audit van het uitvoeringspad. Doel: dat je tijdens echte tests
 
 - ✅ **Paper-trading op het testnet is veilig** en de aanbevolen manier om nu te
   draaien (`TRADING_MODE=paper`). Geen echt geld, en het pad is getest.
-- ⛔ **Live (echt geld) is geblokkeerd** met een interlock. De runtime weigert
-  `TRADING_MODE=live` te starten tenzij je expliciet `ALLOW_LIVE_REAL_ORDERS=true`
-  zet — en dat moet je **niet** doen vóór de live-only punten hieronder af zijn.
+- ✅ **De kritieke live-bugs zijn nu gefixt** (fill-reconciliatie via de user-data
+  stream, reconcile bij (her)verbinden, futures-ordertypes, spot over-sell-
+  bescherming). Zie de tabellen hieronder.
+- 🔒 **Live (echt geld) blijft achter een opt-in.** De runtime weigert
+  `TRADING_MODE=live` tenzij je bewust `ALLOW_LIVE_REAL_ORDERS=true` zet. Doe dat
+  pas **na** wekenlang schoon paper-traden op het testnet. De interlock voorkomt
+  dat een config-slip per ongeluk echt geld inzet.
 
 ## Wat is gefixt in deze ronde (gold ook voor paper)
 
@@ -27,23 +31,32 @@ Geborgd door tests: `tests/integration/test_live_execution.py` (partiële TP pla
 een echte order; accounting-invariant houdt stand; exposure-cap verkleint de order;
 noodstop blokkeert alle orders) en `tests/integration/test_realistic_fills.py`.
 
-## Wat MOET af vóór live met echt geld (live-only, niet actief in paper)
+## Live-pad: nu gefixt (was eerder blokkerend voor echt geld)
 
-Deze raken het **echte** beurspad. In paper-mode simuleert de broker fills lokaal,
-dus ze vormen daar geen gevaar — maar live wél. De interlock blokkeert live tot
-deze gedaan zijn:
+Deze raakten het **echte** beurspad. In paper-mode simuleert de broker fills lokaal,
+dus ze vormden daar geen gevaar — maar live wél. Nu gefixt en getest:
 
-| # | Live-only risico | Waarom kritiek | Nodig |
-|---|------------------|----------------|-------|
-| 3 | Engine luistert **niet** naar de user-data stream; beurs-fills (een getriggerde stop) worden niet teruggekoppeld | Bot denkt dat een positie nog open is terwijl de beurs hem al sloot → spookposities, dubbele trades | Een user-data-stream-consumer die fills in `OrderManager`/`PositionManager` verwerkt |
-| 4 | `OrderSynchronizer.reconcile()` wordt nooit gedraaid bij (her)verbinden of na een gemiste candle | Na een websocket-gap blijft een positie onbeheerd / niet-gereconcilieerd | `reconcile()` op start en na elke reconnect/gap |
-| 5 | Futures-gateway erft spot-ordertypes; stuurt `STOP_LOSS` (bestaat niet op USD-M futures) en nooit `reduceOnly` | Live futures: stop-plaatsing wordt geweigerd → positie zonder stop | Futures `create_order` overschrijven (`STOP_MARKET`/`TAKE_PROFIT_MARKET` + `reduceOnly`) |
-| 8 | `reduce_only` wordt op **spot** stil genegeerd | Elke hoeveelheid-desync wordt een verkeerd-gedimensioneerde spot-verkoop | Sluit-/stop-hoeveelheid clampen op vrije basis-balans |
-| 9 | Spot account-equity telt alleen de quote-balans (negeert basis-holdings) | Verkeerde drawdown/sizing-baseline bij start | Basis-holdings tegen laatste prijs meewaarderen |
-| 11 | ATR-proxy is één candle high-low i.p.v. echte ATR | Te grote posities op rustige bars | ATR uit de serie berekenen |
+| # | Live-only risico | Status |
+|---|------------------|:------:|
+| 3 | Engine luisterde **niet** naar de user-data stream; een getriggerde beurs-stop werd niet teruggekoppeld → spookposities | ✅ user-data-stream-consumer verwerkt fills; een gevuurde stop sluit de positie in de boeken (`gateway.parse_user_event` + `TradingEngine._on_order_update` → `OrderExecutor.apply_external_close`) |
+| 4 | `OrderSynchronizer.reconcile()` werd nooit gedraaid bij (her)verbinden | ✅ reconcile op start; positie die op de beurs al weg is wordt lokaal gesloten |
+| 5 | Futures-gateway stuurde `STOP_LOSS` (bestaat niet op USD-M) en nooit `reduceOnly` → stop geweigerd | ✅ futures `create_order` gebruikt `STOP_MARKET`/`TAKE_PROFIT_MARKET` + `reduceOnly` |
+| 8 | `reduce_only` werd op **spot** stil genegeerd → mogelijke over-sell | ✅ reduce-only spot-SELL wordt geclampt op de vrije basis-balans |
 
-> Tot #3, #4 en #5 af zijn: **draai uitsluitend paper op het testnet.** Dat is
-> precies waarvoor de interlock zorgt.
+Geborgd door tests: `tests/integration/test_live_reconciliation.py` (gevuurde stop
+sluit positie zonder nieuwe order; stale positie wordt gereconcilieerd),
+`tests/unit/test_futures_orders.py`, `tests/unit/test_spot_reduce_clamp.py`.
+
+## Kleinere resterende punten (niet blokkerend; paper dekt ze af)
+
+| # | Punt | Impact | Aanpak |
+|---|------|--------|--------|
+| 9 | Spot account-equity telt alleen de quote-balans (negeert basis-holdings) | Alleen verkeerde **start**-baseline áls je met basis-assets begint; runtime-equity is PnL-based en klopt. Start je flat (alleen USDT), dan geen probleem | Optioneel: basis-holdings tegen laatste prijs meewaarderen |
+| 11 | ATR-proxy is één candle high-low i.p.v. echte ATR | Sizing-kwaliteit op rustige bars | Optioneel: ATR uit de serie berekenen |
+
+> Aanbevolen volgorde: weken **paper op testnet** → bevestig dat fills, stops en
+> reconciliatie zich gedragen → pas dan `ALLOW_LIVE_REAL_ORDERS=true` met minimaal
+> kapitaal.
 
 ## Hoe je nu veilig test
 

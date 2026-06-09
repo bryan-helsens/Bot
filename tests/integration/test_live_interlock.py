@@ -23,7 +23,7 @@ def _live_settings(*, allow: bool) -> Settings:
 
 
 def test_live_mode_refuses_to_start_without_explicit_opt_in() -> None:
-    with pytest.raises(RuntimeError, match="LIVE trading is gated"):
+    with pytest.raises(RuntimeError, match="LIVE trading requires an explicit opt-in"):
         build_runtime(_live_settings(allow=False))
 
 

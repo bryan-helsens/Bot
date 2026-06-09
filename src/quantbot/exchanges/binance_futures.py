@@ -11,11 +11,26 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from quantbot.core.constants import MarketType, PositionSide, PositionStatus
-from quantbot.core.models import Balance, Position
+from quantbot.core.constants import MarketType, OrderType, PositionSide, PositionStatus, Side
+from quantbot.core.exceptions import InvalidOrderError
+from quantbot.core.models import Balance, Order, Position
 from quantbot.core.utils import to_decimal
-from quantbot.exchanges.base import AccountInfo
-from quantbot.exchanges.binance_spot import BinanceSpotGateway
+from quantbot.exchanges.base import AccountInfo, OrderRequest, OrderUpdate, StreamEvent
+from quantbot.exchanges.binance_spot import BinanceSpotGateway, _fmt
+
+
+# USD-M Futures order-type strings differ from spot: stops are *_MARKET types and
+# orders carry an explicit reduceOnly flag (spot has neither).
+_FUTURES_ORDER_TYPE: dict[OrderType, str] = {
+    OrderType.MARKET: "MARKET",
+    OrderType.LIMIT: "LIMIT",
+    OrderType.STOP_LOSS: "STOP_MARKET",
+    OrderType.STOP_LOSS_LIMIT: "STOP",
+    OrderType.TAKE_PROFIT: "TAKE_PROFIT_MARKET",
+    OrderType.TAKE_PROFIT_LIMIT: "TAKE_PROFIT",
+    OrderType.TRAILING_STOP: "TRAILING_STOP_MARKET",
+}
+_FUTURES_MARKET_STYLE = {"MARKET", "STOP_MARKET", "TAKE_PROFIT_MARKET", "TRAILING_STOP_MARKET"}
 
 
 class BinanceFuturesGateway(BinanceSpotGateway):
@@ -104,6 +119,45 @@ class BinanceFuturesGateway(BinanceSpotGateway):
             if to_decimal(p.get("positionAmt", "0")) != 0
         ]
 
+    # ------------------------------------------------------------------ orders
+
+    async def create_order(self, request: OrderRequest) -> Order:
+        """Place a futures order with the correct USD-M types and reduceOnly flag.
+
+        Unlike spot, futures stops must be ``STOP_MARKET`` / ``TAKE_PROFIT_MARKET``
+        (not ``STOP_LOSS``) and orders may carry ``reduceOnly`` so a protective
+        close can never flip the position. Inheriting the spot ``create_order``
+        would send an invalid type and drop ``reduceOnly`` entirely.
+        """
+        info = await self.get_symbol_info(request.symbol)
+        qty = info.round_qty(request.quantity)
+        if qty <= 0:
+            raise InvalidOrderError(
+                "Quantity rounds to zero",
+                context={"symbol": request.symbol, "qty": str(request.quantity)},
+            )
+        btype = _FUTURES_ORDER_TYPE[request.type]
+        params: dict[str, Any] = {
+            "symbol": request.symbol,
+            "side": request.side.value.upper(),
+            "type": btype,
+            "quantity": _fmt(qty),
+        }
+        if request.client_order_id:
+            params["newClientOrderId"] = request.client_order_id
+        if request.reduce_only:
+            params["reduceOnly"] = "true"
+        if btype not in _FUTURES_MARKET_STYLE:
+            if request.price is not None:
+                params["price"] = _fmt(info.round_price(request.price))
+            params["timeInForce"] = request.time_in_force.value.upper()
+        if request.stop_price is not None:
+            params["stopPrice"] = _fmt(info.round_price(request.stop_price))
+        data = await self._request(
+            "POST", f"{self._api_prefix}/order", params=params, weight=1, signed=True, is_order=True
+        )
+        return self._parse_order(data, request)
+
     def _parse_position(self, data: dict[str, Any]) -> Position:
         amount = to_decimal(data.get("positionAmt", "0"))
         side = PositionSide.LONG if amount > 0 else PositionSide.SHORT
@@ -155,6 +209,30 @@ class BinanceFuturesGateway(BinanceSpotGateway):
             "POST", f"{self._api_prefix}/listenKey", weight=1, send_api_key=True
         )
         return str(data["listenKey"])
+
+    def parse_user_event(self, event: StreamEvent) -> OrderUpdate | None:
+        """Translate a futures ``ORDER_TRADE_UPDATE`` into a normalized OrderUpdate."""
+        from quantbot.exchanges.binance_spot import _BINANCE_TO_STATUS
+
+        if event.kind != "ORDER_TRADE_UPDATE":
+            return None
+        o = event.payload.get("o", {})
+        if not isinstance(o, dict):
+            return None
+        status = _BINANCE_TO_STATUS.get(str(o.get("X", "")))
+        if status is None:
+            return None
+        last_price = to_decimal(str(o.get("L", "0")))
+        return OrderUpdate(
+            client_order_id=str(o.get("c", "")),
+            exchange_order_id=str(o.get("i", "")) or None,
+            symbol=str(o.get("s", "")),
+            status=status,
+            filled_qty=to_decimal(str(o.get("z", "0"))),
+            fill_price=last_price if last_price > 0 else None,
+            commission=to_decimal(str(o.get("n", "0"))),
+            side=Side(str(o.get("S", "BUY")).lower()),
+        )
 
 
 __all__ = ["BinanceFuturesGateway"]

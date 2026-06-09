@@ -85,16 +85,16 @@ def build_runtime(
     """Assemble a :class:`Runtime` from *settings*."""
     settings = settings or get_settings()
 
-    # Safety interlock: LIVE mode places REAL orders, but the live path still lacks
-    # exchange-fill reconciliation (see docs/LIVE_SAFETY.md). Refuse to start it
-    # unless the operator has explicitly accepted the risk, so a stray
-    # TRADING_MODE=live can never lose real money by accident. Paper/testnet is
-    # unaffected and is the supported way to run today.
+    # Safety interlock: LIVE mode places REAL orders. The critical live-path bugs
+    # are fixed (exchange-fill reconciliation, futures order types, over-sell
+    # protection — see docs/LIVE_SAFETY.md), but real money should still require a
+    # deliberate opt-in so a stray TRADING_MODE=live can never trade by accident.
+    # Validate on the testnet first, then set ALLOW_LIVE_REAL_ORDERS=true.
     if settings.trading_mode is TradingMode.LIVE and not settings.allow_live_real_orders:
         raise RuntimeError(
-            "LIVE trading is gated: the live exchange-fill reconciliation path is "
-            "not yet complete (see docs/LIVE_SAFETY.md). Run TRADING_MODE=paper on "
-            "the testnet. To override deliberately, set ALLOW_LIVE_REAL_ORDERS=true."
+            "LIVE trading requires an explicit opt-in. Validate on the testnet with "
+            "TRADING_MODE=paper first (see docs/LIVE_SAFETY.md), then set "
+            "ALLOW_LIVE_REAL_ORDERS=true to trade real money."
         )
 
     bus = event_bus or EventBus()

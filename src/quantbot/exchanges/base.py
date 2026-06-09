@@ -21,6 +21,7 @@ from decimal import Decimal
 
 from quantbot.core.constants import (
     MarketType,
+    OrderStatus,
     OrderType,
     Side,
     TimeInForce,
@@ -85,6 +86,25 @@ class StreamEvent:
     kind: str
     payload: dict[str, object]
     received_at: datetime
+
+
+@dataclass(slots=True)
+class OrderUpdate:
+    """A normalized order-status update parsed from a user-data stream event.
+
+    Lets the engine react to exchange-side fills (notably a resting protective
+    stop firing) without knowing any exchange's wire format — the gateway parses
+    its native event into this shape via :meth:`ExchangeGateway.parse_user_event`.
+    """
+
+    client_order_id: str
+    exchange_order_id: str | None
+    symbol: str
+    status: OrderStatus
+    filled_qty: Decimal
+    fill_price: Decimal | None
+    commission: Decimal
+    side: Side
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +236,16 @@ class ExchangeGateway(LoggerMixin, abc.ABC):
     @abc.abstractmethod
     def stream_user_events(self) -> AsyncIterator[StreamEvent]:
         """Yield account/order events from the authenticated user stream."""
+
+    def parse_user_event(self, event: StreamEvent) -> OrderUpdate | None:
+        """Normalize a user-stream event into an :class:`OrderUpdate`, or None.
+
+        Default: no-op (returns None) — gateways without a user stream (paper,
+        mock) simply produce no updates. Concrete exchange adapters override this
+        to translate their native order-update events.
+        """
+        _ = event
+        return None
 
     # ------------------------------------------------------------------ helpers
 

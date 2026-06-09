@@ -57,7 +57,13 @@ from quantbot.core.models import (
     utcnow,
 )
 from quantbot.core.utils import async_retry, from_millis, to_decimal, to_millis
-from quantbot.exchanges.base import AccountInfo, ExchangeGateway, OrderRequest, StreamEvent
+from quantbot.exchanges.base import (
+    AccountInfo,
+    ExchangeGateway,
+    OrderRequest,
+    OrderUpdate,
+    StreamEvent,
+)
 from quantbot.exchanges.rate_limiter import RateLimiter
 from quantbot.exchanges.websocket import WebSocketManager
 
@@ -312,6 +318,24 @@ class BinanceSpotGateway(ExchangeGateway):
             raise InvalidOrderError(
                 "Quantity rounds to zero", context={"symbol": request.symbol, "qty": str(request.quantity)}
             )
+        # Spot has no reduce-only flag, so a protective SELL is clamped to the free
+        # base balance — any residual desync then under-sells instead of selling
+        # assets we don't hold (which would error or sell unrelated holdings).
+        if request.reduce_only and request.side is Side.SELL:
+            try:
+                free = info.round_qty((await self.get_balance(info.base_asset)).free)
+            except Exception as exc:  # noqa: BLE001 - best-effort clamp; fall back to requested
+                self.log.warning("reduce_balance_lookup_failed", symbol=request.symbol, error=str(exc))
+                free = qty
+            if 0 < free < qty:
+                self.log.info("reduce_clamped_to_balance", symbol=request.symbol,
+                              requested=float(qty), free=float(free))
+                qty = free
+            if qty <= 0:
+                raise InvalidOrderError(
+                    "No free base balance to reduce",
+                    context={"symbol": request.symbol, "base": info.base_asset},
+                )
         params: dict[str, Any] = {
             "symbol": request.symbol,
             "side": request.side.value.upper(),
@@ -463,6 +487,26 @@ class BinanceSpotGateway(ExchangeGateway):
             yield StreamEvent(
                 kind=msg.get("e", "unknown"), payload=msg, received_at=utcnow()
             )
+
+    def parse_user_event(self, event: StreamEvent) -> OrderUpdate | None:
+        """Translate a spot ``executionReport`` into a normalized OrderUpdate."""
+        if event.kind != "executionReport":
+            return None
+        m = event.payload
+        status = _BINANCE_TO_STATUS.get(str(m.get("X", "")))
+        if status is None:
+            return None
+        last_price = to_decimal(str(m.get("L", "0")))
+        return OrderUpdate(
+            client_order_id=str(m.get("c", "")),
+            exchange_order_id=str(m.get("i", "")) or None,
+            symbol=str(m.get("s", "")),
+            status=status,
+            filled_qty=to_decimal(str(m.get("z", "0"))),
+            fill_price=last_price if last_price > 0 else None,
+            commission=to_decimal(str(m.get("n", "0"))),
+            side=Side(str(m.get("S", "BUY")).lower()),
+        )
 
     async def _create_listen_key(self) -> str:
         data = await self._request(

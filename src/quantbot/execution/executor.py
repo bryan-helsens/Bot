@@ -242,6 +242,34 @@ class OrderExecutor(LoggerMixin):
             })
         return order
 
+    async def apply_external_close(
+        self, position: Position, *, fill_price: Decimal, fee: Decimal = Decimal("0"), reason=None
+    ) -> None:
+        """Reflect an exchange-side close (e.g. a resting stop that fired) locally.
+
+        The exchange has ALREADY closed the position, so this places NO order — it
+        only realises the trade in the books so the bot stops managing a position
+        that no longer exists. Used by the user-stream/reconciliation path.
+        """
+        from quantbot.core.constants import ExitReason
+
+        reason = reason or ExitReason.STOP_LOSS
+        trade = self._portfolio.positions.close_position(
+            position.symbol, exit_price=fill_price, reason=reason, fee=fee,
+        )
+        if trade is not None:
+            self._portfolio.apply_trade(trade)
+            self._risk.record_trade_result(position, trade.net_pnl)
+            await self._emit(EventType.TRADE_CLOSED, {
+                "symbol": trade.symbol, "net_pnl": str(trade.net_pnl),
+                "exit_price": str(trade.exit_price), "reason": reason.value,
+                "external": True,
+            })
+            self.log.info(
+                "external_close_reconciled", symbol=position.symbol,
+                exit=float(fill_price), net_pnl=float(trade.net_pnl),
+            )
+
     async def _cancel_stop(self, position: Position) -> None:
         stop_id = position.meta.get("stop_order_id")
         if not stop_id:

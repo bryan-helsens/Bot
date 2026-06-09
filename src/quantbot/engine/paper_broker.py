@@ -116,6 +116,11 @@ class PaperTradingBroker(ExchangeGateway):
     def stream_user_events(self) -> AsyncIterator[StreamEvent]:
         return self._real.stream_user_events()
 
+    def parse_user_event(self, event):
+        # Paper fills happen synchronously in create_order; delegate parsing so the
+        # shape matches the wrapped gateway (a real one yields no events here).
+        return self._real.parse_user_event(event)
+
     # ------------------------------------------------------------------ account (simulated)
 
     async def get_account(self) -> AccountInfo:

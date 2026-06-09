@@ -36,7 +36,8 @@ from quantbot.core.logging import LoggerMixin
 from quantbot.core.models import Candle, Position
 from quantbot.data.market_data import MarketDataService
 from quantbot.engine.paper_broker import PaperTradingBroker
-from quantbot.exchanges.base import ExchangeGateway
+from quantbot.exchanges.base import ExchangeGateway, OrderUpdate
+from quantbot.exchanges.synchronizer import OrderSynchronizer
 from quantbot.execution.executor import OrderExecutor
 from quantbot.portfolio.manager import PortfolioManager
 from quantbot.risk.engine import RiskEngine
@@ -71,6 +72,8 @@ class TradingEngine(LoggerMixin):
         self._bus = event_bus
         self._running = False
         self._snapshot_task: asyncio.Task[None] | None = None
+        self._user_task: asyncio.Task[None] | None = None
+        self._synchronizer = OrderSynchronizer(gateway)
         self._unsubscribe = None
 
     # ------------------------------------------------------------------ lifecycle
@@ -87,9 +90,16 @@ class TradingEngine(LoggerMixin):
         timeframes = self._settings.timeframes
         await self._market_data.start(symbols, timeframes)
 
+        # Reconcile local books against the exchange before trading: a stop may have
+        # fired or an order filled while we were down/disconnected.
+        await self._reconcile_with_exchange()
+
         self._unsubscribe = self._bus.subscribe(EventType.CANDLE_CLOSED, self._on_candle_event)
         self._running = True
         self._snapshot_task = asyncio.create_task(self._snapshot_loop(), name="equity-snapshots")
+        # Consume the authenticated user-data stream so exchange-side fills (notably
+        # a resting protective stop firing mid-candle) are reflected immediately.
+        self._user_task = asyncio.create_task(self._user_event_loop(), name="user-events")
         await self._bus.publish(Event(EventType.ENGINE_STARTED, payload={"symbols": symbols}))
         self.log.info("engine_started", symbols=symbols, strategies=len(self._strategies))
 
@@ -98,12 +108,13 @@ class TradingEngine(LoggerMixin):
         self._running = False
         if self._unsubscribe is not None:
             self._unsubscribe()
-        if self._snapshot_task is not None:
-            self._snapshot_task.cancel()
-            try:
-                await self._snapshot_task
-            except asyncio.CancelledError:
-                pass
+        for task in (self._snapshot_task, self._user_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         await self._market_data.stop()
         if close_positions:
             await self._flatten_all()
@@ -236,6 +247,79 @@ class TradingEngine(LoggerMixin):
             from quantbot.core.constants import ExitReason
 
             await self._executor.close_position(position, exit_price=price, reason=ExitReason.MANUAL)
+
+    # ------------------------------------------------------------------ exchange reconciliation
+
+    async def _reconcile_with_exchange(self) -> None:
+        """Reconcile local orders/positions with the exchange on (re)connect.
+
+        A position the exchange has already closed (a stop that fired while we were
+        disconnected) is reflected in the books so the engine stops managing a
+        phantom position. Never places orders — only updates bookkeeping.
+        """
+        try:
+            local_orders = [
+                o for o in self._executor.orders.all_orders() if not o.status.is_terminal
+            ]
+            local_positions = list(self._portfolio.positions.all_open())
+            result = await self._synchronizer.reconcile(
+                local_orders, local_positions, symbols=self._settings.symbols
+            )
+            for position in result.stale_positions:
+                held = self._portfolio.positions.get(position.symbol)
+                if held is not None and held.is_open:
+                    price = (
+                        self._portfolio.price_of(position.symbol)
+                        or held.mark_price or held.entry_price
+                    )
+                    await self._executor.apply_external_close(
+                        held, fill_price=price, reason=ExitReason.MANUAL
+                    )
+            if result.orphan_positions or result.orphan_orders:
+                self.log.warning(
+                    "reconcile_orphans_detected",
+                    positions=len(result.orphan_positions), orders=len(result.orphan_orders),
+                )
+        except Exception as exc:  # noqa: BLE001 - reconciliation must never crash startup
+            self.log.error("reconcile_failed", error=str(exc))
+
+    async def _user_event_loop(self) -> None:
+        """Apply exchange-side order fills (a fired stop) to the local books."""
+        try:
+            async for event in self._gateway.stream_user_events():
+                try:
+                    update = self._gateway.parse_user_event(event)
+                except Exception as exc:  # noqa: BLE001 - one bad event must not stop the stream
+                    self.log.warning("user_event_parse_error", error=str(exc))
+                    continue
+                if update is not None:
+                    await self._on_order_update(update)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - log and exit; reconnect handled elsewhere
+            self.log.error("user_event_loop_error", error=str(exc))
+
+    async def _on_order_update(self, update: OrderUpdate) -> None:
+        """React to an exchange order update — reconcile a fired protective stop."""
+        from quantbot.core.constants import OrderStatus
+
+        if update.filled_qty <= 0 or update.status not in (
+            OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED
+        ):
+            return
+        # A resting protective stop firing is the critical case: we placed it as a
+        # working order and would otherwise never learn it executed. Match by id.
+        for position in list(self._portfolio.positions.all_open()):
+            if position.meta.get("stop_order_id") == update.client_order_id:
+                price = (
+                    update.fill_price or position.stop_loss
+                    or position.mark_price or position.entry_price
+                )
+                await self._executor.apply_external_close(
+                    position, fill_price=price, fee=update.commission,
+                    reason=ExitReason.STOP_LOSS,
+                )
+                return
 
     # ------------------------------------------------------------------ snapshots
 
