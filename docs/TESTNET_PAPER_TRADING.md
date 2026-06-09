@@ -10,6 +10,23 @@ niveau, dus paper-trading meet wat de backtest niet kan weten.
 > die blokkeert alle exchange-API's (alleen GitHub-raw is bereikbaar). Op je eigen
 > machine met internettoegang werkt alles hieronder.
 
+## Sneller starten (kant-en-klaar)
+
+```bash
+cp .env.testnet.example .env                          # echte koersen, nepgeld
+cp config/strategies.paper.example.yaml config/strategies.yaml
+# vul BINANCE__API_KEY en BINANCE__API_SECRET in .env in (zie stap 1)
+python scripts/test_testnet.py --order --paper        # preflight, moet groen zijn
+quantbot run                                          # start de bot
+```
+
+### Twee modi (beide nepgeld, beide echte koersen)
+- **`TRADING_MODE=live`** (default in `.env.testnet.example`): orders gaan **echt**
+  naar de testnet-beurs — het meest realistisch ("echte bedragen"). Op testnet is
+  dit gratis nepgeld; de veiligheids-opt-in geldt alleen voor mainnet.
+- **`TRADING_MODE=paper`**: fills lokaal gesimuleerd tegen een interne balans. Zet
+  dit als je liever eerst zonder echte order-plaatsing begint. Eén regel omzetten.
+
 ---
 
 ## 0. Vereisten
