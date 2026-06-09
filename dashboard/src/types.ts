@@ -90,3 +90,11 @@ export interface WsMessage {
   payload: Record<string, unknown>;
   ts: string;
 }
+
+export interface LogEntry {
+  ts: string | null;
+  level: string;
+  event: string;
+  logger: string;
+  data: Record<string, string>;
+}

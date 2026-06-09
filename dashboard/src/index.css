@@ -102,6 +102,31 @@ body {
 .pos { color: var(--green); }
 .neg { color: var(--red); }
 .muted { color: var(--muted); }
+
+.log-head { display: flex; justify-content: space-between; align-items: center; }
+.log-toggle { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.log-box {
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.log-line { white-space: pre-wrap; word-break: break-word; }
+.log-time { color: var(--muted); margin-right: 8px; }
+.log-level { display: inline-block; width: 38px; font-weight: 700; margin-right: 8px; }
+.log-event { color: var(--text); }
+.log-ctx { color: var(--muted); }
+.log-info .log-level { color: var(--accent); }
+.log-warning { color: #e7b400; }
+.log-warning .log-level { color: #e7b400; }
+.log-error, .log-critical { color: var(--red); }
+.log-error .log-level, .log-critical .log-level { color: var(--red); }
+.log-debug { color: var(--muted); }
 tr.total th, tr.total td {
   border-top: 1px solid var(--border);
   padding-top: 8px;

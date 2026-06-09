@@ -7,8 +7,11 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 
 from quantbot.api.dependencies import AuthDep, StateDep, create_access_token
+from fastapi import Query
+
 from quantbot.api.schemas import (
     HealthResponse,
+    LogEntry,
     LoginRequest,
     MessageResponse,
     SystemStatusSchema,
@@ -107,6 +110,18 @@ async def test_order(req: TestOrderRequest, state: StateDep, _: AuthDep) -> Mess
         return MessageResponse(detail=f"Invalid side '{req.side}' (use buy/sell)", ok=False)
     result = await engine.submit_manual_order(req.symbol.strip().upper(), side)
     return MessageResponse(detail=result["detail"], ok=bool(result["ok"]))
+
+
+@router.get("/system/logs", response_model=list[LogEntry], tags=["system"])
+async def system_logs(
+    _: AuthDep,
+    limit: int = Query(default=200, ge=1, le=1000),
+    level: str | None = Query(default=None),
+) -> list[LogEntry]:
+    """Recent log lines (what the bot is doing) for the dashboard log panel."""
+    from quantbot.core.logging import LOG_BUFFER
+
+    return [LogEntry(**entry) for entry in LOG_BUFFER.recent(limit, level=level)]
 
 
 __all__ = ["router"]

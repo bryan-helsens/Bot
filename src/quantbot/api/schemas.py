@@ -29,6 +29,16 @@ class TestOrderRequest(BaseModel):
     side: str  # "buy" | "sell"
 
 
+class LogEntry(BaseModel):
+    """A single recent log line for the dashboard log panel."""
+
+    ts: str | None = None
+    level: str = "info"
+    event: str = ""
+    logger: str = ""
+    data: dict[str, str] = {}
+
+
 class HealthResponse(BaseModel):
     """Service health summary."""
 

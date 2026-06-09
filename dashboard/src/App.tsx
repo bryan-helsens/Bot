@@ -4,6 +4,7 @@ import { Balances } from "./components/Balances";
 import { ClosedTrades } from "./components/ClosedTrades";
 import { DrawdownChart } from "./components/DrawdownChart";
 import { EquityCurve } from "./components/EquityCurve";
+import { LogPanel } from "./components/LogPanel";
 import { ManualTrade } from "./components/ManualTrade";
 import { OpenPositions } from "./components/OpenPositions";
 import { PnLPanel } from "./components/PnLPanel";
@@ -82,6 +83,10 @@ export function App() {
 
         <div className="col-12">
           <ClosedTrades />
+        </div>
+
+        <div className="col-12">
+          <LogPanel />
         </div>
       </div>
     </div>

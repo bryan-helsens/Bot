@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections import deque
 from collections.abc import Callable
 from typing import Any
 
@@ -25,6 +26,54 @@ import structlog
 from structlog.types import EventDict, Processor
 
 from quantbot.core.constants import LogFormat
+
+# ---------------------------------------------------------------------------
+# In-memory log ring buffer (for the dashboard log panel)
+# ---------------------------------------------------------------------------
+
+
+class LogBuffer:
+    """Keeps the most recent log entries in memory for the API/dashboard.
+
+    A structlog processor (:func:`_capture_to_buffer`) appends a lightweight copy
+    of every rendered event here, so the dashboard can show "what the bot is doing"
+    live without reading files. Bounded, so it never grows without limit.
+    """
+
+    def __init__(self, maxlen: int = 1000) -> None:
+        self._buf: deque[dict[str, Any]] = deque(maxlen=maxlen)
+
+    def add(self, entry: dict[str, Any]) -> None:
+        self._buf.append(entry)
+
+    def recent(self, limit: int = 200, *, level: str | None = None) -> list[dict[str, Any]]:
+        items = list(self._buf)
+        if level:
+            wanted = level.upper()
+            items = [e for e in items if str(e.get("level", "")).upper() == wanted]
+        return items[-limit:]
+
+    def clear(self) -> None:
+        self._buf.clear()
+
+
+#: Process-wide buffer the dashboard reads via ``GET /system/logs``.
+LOG_BUFFER = LogBuffer()
+
+
+def _capture_to_buffer(_logger: Any, _method: str, event_dict: EventDict) -> EventDict:
+    """structlog processor: snapshot each event into :data:`LOG_BUFFER`."""
+    reserved = {"event", "level", "timestamp", "logger", "stack", "exception"}
+    LOG_BUFFER.add(
+        {
+            "ts": event_dict.get("timestamp"),
+            "level": str(event_dict.get("level", "info")),
+            "event": str(event_dict.get("event", "")),
+            "logger": event_dict.get("logger", ""),
+            "data": {k: str(v) for k, v in event_dict.items() if k not in reserved},
+        }
+    )
+    return event_dict
 
 # ---------------------------------------------------------------------------
 # Secret redaction
@@ -111,6 +160,7 @@ def configure_logging(
         timestamper,
         structlog.processors.StackInfoRenderer(),
         redact_secrets,
+        _capture_to_buffer,
     ]
 
     renderer: Processor

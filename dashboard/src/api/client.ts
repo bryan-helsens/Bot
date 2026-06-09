@@ -4,6 +4,7 @@
 import type {
   EquityPoint,
   Health,
+  LogEntry,
   Portfolio,
   Position,
   RiskStatus,
@@ -51,6 +52,10 @@ export const api = {
     request<{ detail: string; ok: boolean }>("/system/emergency-stop", { method: "POST" }),
   resume: () =>
     request<{ detail: string; ok: boolean }>("/system/resume", { method: "POST" }),
+  logs: (limit = 200, level?: string) =>
+    request<LogEntry[]>(
+      `/system/logs?limit=${limit}${level ? `&level=${level}` : ""}`,
+    ),
   testOrder: (symbol: string, side: "buy" | "sell") =>
     request<{ detail: string; ok: boolean }>("/system/test-order", {
       method: "POST",
