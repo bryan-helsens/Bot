@@ -205,10 +205,15 @@ class BinanceFuturesGateway(BinanceSpotGateway):
     # ------------------------------------------------------------------ user stream
 
     async def _create_listen_key(self) -> str:
+        from quantbot.core.exceptions import ExchangeError
+
         data = await self._request(
             "POST", f"{self._api_prefix}/listenKey", weight=1, send_api_key=True
         )
-        return str(data["listenKey"])
+        key = data.get("listenKey") if isinstance(data, dict) else None
+        if not key:
+            raise ExchangeError("listenKey endpoint returned no key")
+        return str(key)
 
     def parse_user_event(self, event: StreamEvent) -> OrderUpdate | None:
         """Translate a futures ``ORDER_TRADE_UPDATE`` into a normalized OrderUpdate."""

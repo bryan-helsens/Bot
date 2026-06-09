@@ -5,6 +5,7 @@ manages a phantom position once it's live.
 
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
 
 import pytest
@@ -101,3 +102,18 @@ async def test_reconcile_on_start_closes_a_remotely_gone_position() -> None:
 
     assert not portfolio.positions.has_position("BTCUSDT"), "stale local position must be closed"
     assert placed == [], "reconciliation must not place orders"
+
+
+async def test_user_event_loop_gives_up_without_hanging(monkeypatch) -> None:
+    """An unavailable user stream must not hang or busy-loop — it degrades and exits."""
+    engine, _portfolio, _placed = _engine()
+    engine._running = True
+
+    async def _instant(*_a, **_k):  # skip the backoff sleeps
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _instant)
+
+    # MockGateway's user stream ends immediately/empty; the loop should give up after
+    # a bounded number of retries and RETURN (not raise, not spin forever).
+    await asyncio.wait_for(engine._user_event_loop(), timeout=5)

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import time
 import urllib.parse
 from collections.abc import AsyncIterator, Sequence
@@ -531,7 +532,10 @@ class BinanceSpotGateway(ExchangeGateway):
         data = await self._request(
             "POST", f"{self._api_prefix}/userDataStream", weight=2, send_api_key=True
         )
-        return str(data["listenKey"])
+        key = data.get("listenKey") if isinstance(data, dict) else None
+        if not key:
+            raise ExchangeError("userDataStream returned no listenKey")
+        return str(key)
 
     # ------------------------------------------------------------------ REST core
 
@@ -564,12 +568,24 @@ class BinanceSpotGateway(ExchangeGateway):
         try:
             async with self._session.request(method, url, params=params, headers=headers) as resp:
                 self._track_weight(resp.headers)
-                body = await resp.json(content_type=None)
-                if resp.status >= 400:
-                    self._raise_for_error(resp.status, body)
-                return body
+                text = await resp.text()
+                status = resp.status
         except aiohttp.ClientError as exc:
             raise ExchangeConnectionError(f"HTTP request failed: {exc}") from exc
+
+        stripped = text.strip()
+        body: Any = {}
+        if stripped:
+            try:
+                body = json.loads(stripped)
+            except ValueError as exc:
+                if status < 400:
+                    raise ExchangeError(
+                        f"Non-JSON response from {path} (status {status}): {stripped[:120]}"
+                    ) from exc
+        if status >= 400:
+            self._raise_for_error(status, body)
+        return body
 
     def _sign(self, query: str) -> str:
         secret = self._cfg.api_secret.get_secret_value().encode()

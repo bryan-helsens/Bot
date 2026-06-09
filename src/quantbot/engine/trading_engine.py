@@ -314,20 +314,50 @@ class TradingEngine(LoggerMixin):
             self.log.error("reconcile_failed", error=str(exc))
 
     async def _user_event_loop(self) -> None:
-        """Apply exchange-side order fills (a fired stop) to the local books."""
-        try:
-            async for event in self._gateway.stream_user_events():
-                try:
-                    update = self._gateway.parse_user_event(event)
-                except Exception as exc:  # noqa: BLE001 - one bad event must not stop the stream
-                    self.log.warning("user_event_parse_error", error=str(exc))
-                    continue
-                if update is not None:
-                    await self._on_order_update(update)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # noqa: BLE001 - log and exit; reconnect handled elsewhere
-            self.log.error("user_event_loop_error", error=str(exc))
+        """Apply exchange-side order fills (a fired stop) to the local books.
+
+        Reconnects with backoff if the user-data stream errors (e.g. a flaky
+        listen-key). If it keeps failing it degrades gracefully — the local
+        StopManager still enforces stops on each candle, so trading is unaffected;
+        only the live exchange-fill reconciliation is unavailable.
+        """
+        delay = 2.0
+        failures = 0
+        while self._running:
+            got_event = False
+            try:
+                async for event in self._gateway.stream_user_events():
+                    got_event = True
+                    failures, delay = 0, 2.0  # healthy stream resets the backoff
+                    try:
+                        update = self._gateway.parse_user_event(event)
+                    except Exception as exc:  # noqa: BLE001 - one bad event must not stop the stream
+                        self.log.warning("user_event_parse_error", error=str(exc))
+                        continue
+                    if update is not None:
+                        await self._on_order_update(update)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - reconnect with backoff
+                failures += 1
+                if failures == 1:
+                    self.log.warning("user_event_stream_error", error=str(exc))
+            else:
+                # Stream ended without error. If it never yielded anything (no user
+                # stream available, e.g. on this testnet), count it toward giving up
+                # rather than busy-reconnecting.
+                if not got_event:
+                    failures += 1
+            if failures >= 5:
+                self.log.warning(
+                    "user_event_stream_unavailable",
+                    detail="exchange-fill reconciliation disabled; the local "
+                           "StopManager remains the backstop",
+                )
+                return
+            if failures:
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30.0)
 
     async def _on_order_update(self, update: OrderUpdate) -> None:
         """React to an exchange order update — reconcile a fired protective stop."""
