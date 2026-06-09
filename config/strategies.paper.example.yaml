@@ -1,0 +1,30 @@
+# Paper-trading strategy config for Binance TESTNET.
+#
+# Copy to config/strategies.yaml (the path STRATEGIES_CONFIG points at) to use:
+#     cp config/strategies.paper.example.yaml config/strategies.yaml
+#
+# ⚠️ This is a config UNDER TEST, not a proven-profitable one. No daily config was
+# profitable under realistic fills (see docs/REALISTIC_FILLS_REPORT.md). The POINT
+# of paper-trading is to gather REAL live-execution data — where stops fill near
+# their level on short candles — to find out honestly whether any edge exists.
+# Run it on intraday timeframes (5m/15m) so:
+#   * stops fill close to their price (the realistic-execution regime), and
+#   * enough trades accrue in days, not months, to judge it.
+#
+# Risk is deliberately SMALL and conservative (see the matching .env block in
+# docs/TESTNET_PAPER_TRADING.md). Start here; only widen after weeks of clean runs.
+
+strategies:
+  # Single, interpretable strategy so paper results are diagnosable. RSI
+  # mean-reversion: buy oversold bounces, exit on overbought / take-profit / stop.
+  - name: rsi_dip_buyer
+    class: RSIStrategy
+    market: spot
+    enabled: true
+    # Binance SPOT testnet reliably lists these; add more once confirmed available.
+    symbols: [BTCUSDT, ETHUSDT, BNBUSDT]
+    timeframes: [5m, 15m]
+    params:
+      period: 14
+      oversold: 35
+      overbought: 70
