@@ -127,22 +127,38 @@ def serve(
     )
     application = create_app(settings=settings, state=state, event_bus=runtime.event_bus)
 
+    bind_host = host or settings.api.host
+    bind_port = port or settings.api.port
+
+    async def _start_engine() -> None:
+        """Bring the engine up WITHOUT taking the dashboard down if it fails."""
+        try:
+            await runtime.gateway.connect()
+            await runtime.engine.start()
+            console.print("[green]Engine connected and trading.[/]")
+        except Exception as exc:  # noqa: BLE001 - keep the dashboard reachable
+            console.print(
+                f"[red]Engine failed to start:[/] {exc}\n"
+                f"[yellow]The dashboard stays up (showing empty/last state). "
+                f"Fix the cause and restart.[/]"
+            )
+
     async def _serve() -> None:
         config = uvicorn.Config(
-            application,
-            host=host or settings.api.host,
-            port=port or settings.api.port,
+            application, host=bind_host, port=bind_port,
             log_level=settings.log_level.lower(),
         )
         server = uvicorn.Server(config)
-        await runtime.gateway.connect()
-        await runtime.engine.start()
+        # Start the API FIRST (so the dashboard is reachable immediately), then bring
+        # the engine up concurrently. An engine startup error no longer prevents the
+        # API from listening on :8000.
+        server_task = asyncio.create_task(server.serve())
         console.print(
-            f"[green]Dashboard API on[/] http://{host or settings.api.host}:"
-            f"{port or settings.api.port}  (docs at /docs)"
+            f"[green]Dashboard API on[/] http://{bind_host}:{bind_port}  (docs at /docs)"
         )
+        await _start_engine()
         try:
-            await server.serve()  # blocks until Ctrl-C / SIGTERM
+            await server_task  # blocks until Ctrl-C / SIGTERM
         finally:
             await runtime.engine.stop()
             await runtime.gateway.close()
