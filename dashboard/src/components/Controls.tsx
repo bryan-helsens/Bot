@@ -24,6 +24,7 @@ export function Controls() {
   }
 
   const paused = status?.paused ?? false;
+  const [amount, setAmount] = useState("");
 
   return (
     <div className="panel">
@@ -49,8 +50,37 @@ export function Controls() {
         </button>
       </div>
       {paused && <div className="note err">Paused — managing existing positions, no new entries.</div>}
+
+      <h2 style={{ marginTop: 16 }}>Capital (deposit / withdraw)</h2>
+      <div className="controls-row">
+        <input
+          className="cap-input"
+          type="number"
+          placeholder="amount in USDT"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <button
+          className="btn-buy"
+          disabled={busy || !amount}
+          onClick={() => run(() => api.adjustCapital(amount)).then(() => setAmount(""))}
+        >
+          + Deposit
+        </button>
+        <button
+          className="btn"
+          disabled={busy || !amount}
+          onClick={() => run(() => api.adjustCapital("-" + amount.replace(/^-/, ""))).then(() => setAmount(""))}
+        >
+          − Withdraw
+        </button>
+      </div>
+
       {msg && <div className="note">{msg}</div>}
-      <p className="hint">Pause stops NEW trades; existing positions keep their stops/TP.</p>
+      <p className="hint">
+        Pause stops NEW trades; existing keep their stops/TP. Use Capital AFTER you
+        add/remove funds on the exchange — it is NOT counted as profit.
+      </p>
     </div>
   );
 }

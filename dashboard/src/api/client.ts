@@ -60,6 +60,11 @@ export const api = {
     request<{ detail: string; ok: boolean }>("/system/unpause", { method: "POST" }),
   closePosition: (symbol: string) =>
     request<{ detail: string; ok: boolean }>(`/positions/${symbol}/close`, { method: "POST" }),
+  adjustCapital: (amount: string) =>
+    request<{ detail: string; ok: boolean }>("/system/capital", {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    }),
   emergencyStop: () =>
     request<{ detail: string; ok: boolean }>("/system/emergency-stop", { method: "POST" }),
   resume: () =>

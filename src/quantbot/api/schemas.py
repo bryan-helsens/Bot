@@ -29,6 +29,12 @@ class TestOrderRequest(BaseModel):
     side: str  # "buy" | "sell"
 
 
+class CapitalRequest(BaseModel):
+    """Record a deposit (positive) or withdrawal (negative) of capital — NOT profit."""
+
+    amount: str
+
+
 class LogEntry(BaseModel):
     """A single recent log line for the dashboard log panel."""
 

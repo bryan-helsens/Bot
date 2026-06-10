@@ -10,6 +10,7 @@ from quantbot.api.dependencies import AuthDep, StateDep, create_access_token
 from fastapi import Query
 
 from quantbot.api.schemas import (
+    CapitalRequest,
     ConfigSchema,
     HealthResponse,
     LogEntry,
@@ -174,6 +175,26 @@ async def unpause_trading(state: StateDep, _: AuthDep) -> MessageResponse:
         return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
     engine.resume_trading()
     return MessageResponse(detail="Trading resumed")
+
+
+@router.post("/system/capital", response_model=MessageResponse, tags=["system"])
+async def adjust_capital(req: CapitalRequest, state: StateDep, _: AuthDep) -> MessageResponse:
+    """Record a deposit/withdrawal of capital — NOT counted as profit.
+
+    Use this AFTER you add (or remove) funds on the exchange so the bot sizes with
+    the new capital without thinking the change is trading profit.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "adjust_capital"):
+        return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
+    try:
+        amount = Decimal(req.amount)
+    except (InvalidOperation, ValueError):
+        return MessageResponse(detail=f"Invalid amount '{req.amount}'", ok=False)
+    result = engine.adjust_capital(amount)
+    return MessageResponse(detail=result["detail"], ok=bool(result["ok"]))
 
 
 @router.get("/system/config", response_model=ConfigSchema, tags=["system"])

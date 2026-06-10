@@ -261,6 +261,17 @@ class TradingEngine(LoggerMixin):
         await self._executor.close_position(position, exit_price=price, reason=ExitReason.MANUAL)
         return {"ok": True, "detail": f"Closed {symbol} @ {price}"}
 
+    def adjust_capital(self, amount: Decimal) -> dict:
+        """Record a deposit/withdrawal of capital (NOT profit) and persist it."""
+        try:
+            equity = self._portfolio.adjust_capital(amount)
+        except ValueError as exc:
+            return {"ok": False, "detail": str(exc)}
+        self._risk.update_equity(equity)  # refresh drawdown high-water mark
+        self._save_state()
+        verb = "Deposited" if amount >= 0 else "Withdrew"
+        return {"ok": True, "detail": f"{verb} {abs(amount)} — equity now {equity:.2f}"}
+
     async def _on_trade_event(self, _event: Event) -> None:
         self._last_trade_at = utcnow()
 

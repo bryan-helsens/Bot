@@ -66,3 +66,32 @@ def test_empty_path_disables_persistence() -> None:
     pf = _seed()
     assert save_state(pf, "") is False
     assert load_state(pf, "") is False
+
+
+def test_adjust_capital_is_not_profit() -> None:
+    pf = PortfolioManager(starting_balance=Decimal("10000"))
+    # make a small realised profit first
+    pf.positions.open_position(symbol="BTCUSDT", side=Side.BUY, quantity=Decimal("1"),
+                               entry_price=Decimal("100"), fee=Decimal("0"))
+    pf.update_price("BTCUSDT", Decimal("110"))
+    trade = pf.positions.close_position("BTCUSDT", exit_price=Decimal("110"),
+                                        reason=ExitReason.TAKE_PROFIT)
+    pf.apply_trade(trade)
+    assert pf.realized_pnl == Decimal("10")
+    eq_before = pf.equity()
+    ret_before = pf.total_return_pct()
+
+    new_eq = pf.adjust_capital(Decimal("5000"))  # deposit 5000
+
+    assert new_eq == eq_before + Decimal("5000")          # equity went up by the deposit
+    assert pf.realized_pnl == Decimal("10")               # profit UNCHANGED (not counted)
+    # return % is measured against the higher capital base, so it does NOT inflate
+    assert pf.total_return_pct() < ret_before
+    assert pf.cash == Decimal("15010")                    # 10000 + 10 profit + 5000 deposit
+
+
+def test_withdraw_more_than_cash_is_rejected() -> None:
+    pf = PortfolioManager(starting_balance=Decimal("100"))
+    import pytest
+    with pytest.raises(ValueError):
+        pf.adjust_capital(Decimal("-200"))

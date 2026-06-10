@@ -75,6 +75,25 @@ class PortfolioManager(LoggerMixin):
             realized_total=float(self._realized_pnl),
         )
 
+    def adjust_capital(self, amount: Decimal) -> Decimal:
+        """Record a deposit (positive) or withdrawal (negative) of capital.
+
+        This is NOT profit: it moves cash AND the starting-balance baseline (and the
+        drawdown high-water mark) by the same amount, so realised PnL and the return
+        percentage are unaffected — the bot just has more/less capital to size with.
+        Returns the new equity.
+        """
+        if amount < 0 and self._cash + amount < 0:
+            raise ValueError("Withdrawal exceeds available cash")
+        self._cash += amount
+        self._starting_balance += amount
+        self._peak_equity += amount
+        self.log.info(
+            "capital_adjusted", amount=float(amount), cash=float(self._cash),
+            starting_balance=float(self._starting_balance),
+        )
+        return self.equity()
+
     # ------------------------------------------------------------------ equity
 
     @property
