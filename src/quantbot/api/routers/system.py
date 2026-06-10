@@ -132,8 +132,8 @@ async def system_logs(
     return [LogEntry(**entry) for entry in LOG_BUFFER.recent(limit, level=level)]
 
 
-#: Log events that represent an actual buy/sell (for the dashboard activity feed).
-_TRADE_EVENTS = {"position_opened", "position_closed", "position_reduced"}
+#: Log events shown in the dashboard activity feed (buys/sells + capital changes).
+_TRADE_EVENTS = {"position_opened", "position_closed", "position_reduced", "capital_adjusted"}
 
 
 @router.get("/system/activity", response_model=list[LogEntry], tags=["system"])

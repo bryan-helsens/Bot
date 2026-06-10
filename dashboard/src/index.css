@@ -110,6 +110,7 @@ body {
 .act-buy { color: var(--green, #3ddc84); border: 1px solid var(--green, #3ddc84); }
 .act-sell { color: var(--red); border: 1px solid var(--red); }
 .act-tp { color: #e7b400; border: 1px solid #e7b400; }
+.act-cap { color: var(--accent); border: 1px solid var(--accent); }
 .act-text { color: var(--text); }
 
 .log-head { display: flex; justify-content: space-between; align-items: center; }

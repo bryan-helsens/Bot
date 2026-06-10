@@ -44,6 +44,11 @@ function ActivityLine({ entry }: { entry: LogEntry }) {
     cls = "act-tp";
     const pnl = parseFloat(d.net_pnl ?? "0");
     text = `${d.symbol} ${num(d.qty)} · pnl ${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`;
+  } else if (entry.event === "capital_adjusted") {
+    const amt = parseFloat(d.amount ?? "0");
+    kind = amt >= 0 ? "DEP" : "WD";
+    cls = "act-cap";
+    text = `${amt >= 0 ? "💰 deposit +" : "💸 withdraw "}${num(d.amount)} · cash ${num(d.cash)}`;
   } else {
     text = entry.event;
   }
