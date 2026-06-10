@@ -21,22 +21,10 @@ strategies:
     class: RSIStrategy
     market: spot
     enabled: true
-    # A broad mix: large-caps + meme coins + low-priced coins, for varied testing.
-    # The engine SKIPS any symbol the testnet doesn't list (logged as
-    # warmup_skip_symbol) and trades the rest, so it's safe to include extras.
-    symbols:
-      - BTCUSDT    # large
-      - ETHUSDT
-      - BNBUSDT
-      - SOLUSDT
-      - XRPUSDT    # low-priced
-      - ADAUSDT
-      - TRXUSDT    # low-priced
-      - LTCUSDT
-      - DOGEUSDT   # meme
-      - SHIBUSDT   # meme / sub-cent
-      - PEPEUSDT   # meme / sub-cent
-      - FLOKIUSDT  # meme / sub-cent
+    # symbols: [] means "trade EVERY symbol the engine streams" — i.e. whatever you
+    # list in SYMBOLS in .env. So to add/remove coins you edit ONE place (.env),
+    # not here. The engine skips any symbol the testnet doesn't list.
+    symbols: []
     timeframes: [5m, 15m]
     params:
       period: 14
