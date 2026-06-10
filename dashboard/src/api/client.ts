@@ -56,6 +56,7 @@ export const api = {
     request<LogEntry[]>(
       `/system/logs?limit=${limit}${level ? `&level=${level}` : ""}`,
     ),
+  activity: (limit = 50) => request<LogEntry[]>(`/system/activity?limit=${limit}`),
   testOrder: (symbol: string, side: "buy" | "sell") =>
     request<{ detail: string; ok: boolean }>("/system/test-order", {
       method: "POST",

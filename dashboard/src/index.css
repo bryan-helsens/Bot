@@ -103,6 +103,15 @@ body {
 .neg { color: var(--red); }
 .muted { color: var(--muted); }
 
+.activity-box { max-height: 280px; overflow-y: auto; font-size: 13px; }
+.act-line { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.act-time { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+.act-kind { display: inline-block; min-width: 40px; font-weight: 700; text-align: center; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+.act-buy { color: var(--green, #3ddc84); border: 1px solid var(--green, #3ddc84); }
+.act-sell { color: var(--red); border: 1px solid var(--red); }
+.act-tp { color: #e7b400; border: 1px solid #e7b400; }
+.act-text { color: var(--text); }
+
 .log-head { display: flex; justify-content: space-between; align-items: center; }
 .log-toggle { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 .log-box {

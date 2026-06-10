@@ -124,4 +124,19 @@ async def system_logs(
     return [LogEntry(**entry) for entry in LOG_BUFFER.recent(limit, level=level)]
 
 
+#: Log events that represent an actual buy/sell (for the dashboard activity feed).
+_TRADE_EVENTS = {"position_opened", "position_closed", "position_reduced"}
+
+
+@router.get("/system/activity", response_model=list[LogEntry], tags=["system"])
+async def system_activity(
+    _: AuthDep, limit: int = Query(default=50, ge=1, le=500)
+) -> list[LogEntry]:
+    """Recent buy/sell activity (entries, exits, partial take-profits) for the feed."""
+    from quantbot.core.logging import LOG_BUFFER
+
+    events = [e for e in LOG_BUFFER.recent(1000) if e.get("event") in _TRADE_EVENTS]
+    return [LogEntry(**e) for e in events[-limit:]]
+
+
 __all__ = ["router"]
