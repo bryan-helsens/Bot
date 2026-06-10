@@ -50,13 +50,12 @@ def create_app(
     app_state = state or AppState(settings=settings)
     set_state(app_state)
 
-    # REST routers.
-    app.include_router(system.router)
-    app.include_router(portfolio.router)
-    app.include_router(positions.router)
-    app.include_router(trades.router)
-    app.include_router(strategies.router)
-    app.include_router(risk.router)
+    # REST routers — registered at the root AND under /api. The dashboard calls
+    # "/api/..."; in dev the Vite proxy strips /api to the root, while in production
+    # (FastAPI serving the built dashboard itself) the /api routes are used directly.
+    for module in (system, portfolio, positions, trades, strategies, risk):
+        app.include_router(module.router)
+        app.include_router(module.router, prefix="/api")
 
     # WebSocket push.
     manager = ConnectionManager()
@@ -78,9 +77,21 @@ def create_app(
         except Exception:  # noqa: BLE001 - ensure cleanup on any error
             await manager.disconnect(websocket)
 
-    @app.get("/", tags=["system"])
-    async def root() -> dict[str, str]:
-        return {"name": "QuantBot API", "version": __version__, "docs": "/docs"}
+    # Serve the built dashboard (single-page app) if it has been built, so one
+    # process on one port serves both the API and the UI. Mounted LAST so the API
+    # routes above take precedence; everything else falls through to the SPA.
+    from pathlib import Path
+
+    from fastapi.staticfiles import StaticFiles
+
+    dist = Path(__file__).resolve().parents[3] / "dashboard" / "dist"
+    if dist.is_dir():
+        app.mount("/", StaticFiles(directory=str(dist), html=True), name="dashboard")
+        _log.info("dashboard_mounted", path=str(dist))
+    else:
+        @app.get("/", tags=["system"])
+        async def root() -> dict[str, str]:
+            return {"name": "QuantBot API", "version": __version__, "docs": "/docs"}
 
     _log.info("api_app_created", routes=len(app.routes))
     return app

@@ -42,8 +42,10 @@ def client(settings):
 
 
 def test_health_and_root(client: TestClient) -> None:
-    assert client.get("/").json()["name"] == "QuantBot API"
     assert client.get("/health").json()["trading_mode"]
+    assert client.get("/api/health").json()["trading_mode"]  # also under /api (prod)
+    # "/" serves the dashboard SPA when built, otherwise the API info JSON.
+    assert client.get("/").status_code == 200
 
 
 def test_portfolio_and_positions(client: TestClient) -> None:
