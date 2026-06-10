@@ -109,6 +109,14 @@ class EquityPoint(BaseModel):
     equity: float
 
 
+class DailyPnlPoint(BaseModel):
+    """Realised PnL aggregated for one day."""
+
+    date: str
+    pnl: float
+    trades: int
+
+
 class StrategyPerformanceSchema(BaseModel):
     """Performance metrics for one strategy."""
 

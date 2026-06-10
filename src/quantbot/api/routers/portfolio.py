@@ -8,7 +8,12 @@ from decimal import Decimal
 from fastapi import APIRouter
 
 from quantbot.api.dependencies import AuthDep, StateDep
-from quantbot.api.schemas import EquityPoint, PortfolioSchema, TradingStatsSchema
+from quantbot.api.schemas import (
+    DailyPnlPoint,
+    EquityPoint,
+    PortfolioSchema,
+    TradingStatsSchema,
+)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -68,6 +73,23 @@ async def trading_stats(state: StateDep, _: AuthDep) -> TradingStatsSchema:
         best_trade=str(max(pnls)),
         worst_trade=str(min(pnls)),
     )
+
+
+@router.get("/daily-pnl", response_model=list[DailyPnlPoint])
+async def daily_pnl(state: StateDep, _: AuthDep, days: int = 30) -> list[DailyPnlPoint]:
+    """Realised PnL per day (last *days*) from closed trades, for the bar chart."""
+    trades = list(state.performance.trades) if state.performance is not None else []
+    if not trades:
+        return []
+    buckets: dict[str, list[Decimal]] = {}
+    for t in trades:
+        day = t.closed_at.date().isoformat()
+        buckets.setdefault(day, []).append(t.net_pnl)
+    points = [
+        DailyPnlPoint(date=day, pnl=float(sum(pnls)), trades=len(pnls))
+        for day, pnls in sorted(buckets.items())
+    ]
+    return points[-days:]
 
 
 @router.get("/allocation")

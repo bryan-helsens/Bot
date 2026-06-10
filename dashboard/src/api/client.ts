@@ -3,6 +3,7 @@
 
 import type {
   Config,
+  DailyPnlPoint,
   EquityPoint,
   Health,
   LogEntry,
@@ -45,6 +46,7 @@ export const api = {
   systemStatus: () => request<SystemStatus>("/system/status"),
   portfolio: () => request<Portfolio>("/portfolio"),
   equityCurve: () => request<EquityPoint[]>("/portfolio/equity-curve"),
+  dailyPnl: () => request<DailyPnlPoint[]>("/portfolio/daily-pnl"),
   allocation: () => request<Record<string, number>>("/portfolio/allocation"),
   positions: () => request<Position[]>("/positions"),
   trades: (limit = 100) => request<Trade[]>(`/trades?limit=${limit}`),

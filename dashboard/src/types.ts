@@ -129,3 +129,9 @@ export interface LogEntry {
   logger: string;
   data: Record<string, string>;
 }
+
+export interface DailyPnlPoint {
+  date: string;
+  pnl: number;
+  trades: number;
+}
