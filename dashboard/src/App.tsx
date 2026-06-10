@@ -3,8 +3,11 @@ import { api } from "./api/client";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { Balances } from "./components/Balances";
 import { ClosedTrades } from "./components/ClosedTrades";
+import { ConfigPanel } from "./components/ConfigPanel";
+import { Controls } from "./components/Controls";
 import { DrawdownChart } from "./components/DrawdownChart";
 import { EquityCurve } from "./components/EquityCurve";
+import { Health } from "./components/Health";
 import { LogPanel } from "./components/LogPanel";
 import { ManualTrade } from "./components/ManualTrade";
 import { OpenPositions } from "./components/OpenPositions";
@@ -62,6 +65,16 @@ export function App() {
         </div>
         <div className="col-4">
           <RiskStats />
+        </div>
+
+        <div className="col-4">
+          <Controls />
+        </div>
+        <div className="col-4">
+          <Health />
+        </div>
+        <div className="col-4">
+          <ConfigPanel />
         </div>
 
         <div className="col-12">

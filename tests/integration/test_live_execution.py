@@ -247,3 +247,36 @@ async def test_close_cancels_protective_stop_before_selling(make_candle) -> None
     sell = next(i for i, t in enumerate(timeline) if t.startswith("create:sell:market"))
     cancel = timeline.index("cancel")
     assert cancel < sell, "stop must be cancelled BEFORE the closing sell"
+
+
+async def test_pause_blocks_new_entries_but_manages_existing(make_candle) -> None:
+    """Paused: no new positions open, but existing ones are still managed/closable."""
+    settings = _settings(take_profit_levels=[(Decimal("0.10"), Decimal("1.0"))])
+    engine, portfolio, broker, _placed, market_data = _wire(settings, _BuyOnceAt3(
+        symbols=["BTCUSDT"], timeframes=[Timeframe.H1]))
+
+    engine.pause()
+    assert engine.paused is True
+    # _BuyOnceAt3 fires a buy at bar 3, but paused -> no position opens.
+    await _feed(engine, market_data, broker, [100, 100, 100, 100], make_candle)
+    assert not portfolio.positions.has_position("BTCUSDT")
+
+    engine.resume_trading()
+    assert engine.paused is False
+
+
+async def test_close_all_flattens_every_position(make_candle) -> None:
+    settings = _settings(take_profit_levels=[(Decimal("0.10"), Decimal("1.0"))])
+    engine, portfolio, broker, _placed, market_data = _wire(settings, _BuyOnceAt3(
+        symbols=["BTCUSDT"], timeframes=[Timeframe.H1]))
+    series = market_data.series("BTCUSDT", Timeframe.H1)
+    for i, p in enumerate([100, 100, 100, 100]):
+        c = make_candle(i, p)
+        series.append(c)
+        broker.feed_price("BTCUSDT", c.close)
+    await engine.submit_manual_order("BTCUSDT", Side.BUY)
+    assert portfolio.positions.has_position("BTCUSDT")
+
+    n = await engine.close_all()
+    assert n == 1
+    assert not portfolio.positions.has_position("BTCUSDT")

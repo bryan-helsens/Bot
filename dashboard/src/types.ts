@@ -16,6 +16,37 @@ export interface SystemStatus {
   strategies: number;
   connected: boolean;
   started_at: string | null;
+  paused: boolean;
+  last_candle_age: number | null;
+  last_trade_age: number | null;
+  active_streams: number;
+}
+
+export interface TradingStats {
+  today_pnl: string;
+  week_pnl: string;
+  today_trades: number;
+  total_trades: number;
+  win_rate: number;
+  total_fees: string;
+  best_trade: string;
+  worst_trade: string;
+}
+
+export interface Config {
+  sizing_method: string;
+  risk_per_trade: string;
+  default_stop_loss_pct: string;
+  trailing_stop_pct: string;
+  take_profit_levels: string[];
+  max_open_trades: number;
+  max_exposure_per_coin: string;
+  max_portfolio_exposure: string;
+  max_daily_loss: string;
+  max_drawdown: string;
+  symbols: string[];
+  timeframes: string[];
+  min_consensus: number;
 }
 
 export interface Portfolio {

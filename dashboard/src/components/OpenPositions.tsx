@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { api } from "../api/client";
 import type { Position } from "../types";
 
 function cls(value: string): string {
@@ -6,6 +8,19 @@ function cls(value: string): string {
 }
 
 export function OpenPositions({ positions }: { positions: Position[] }) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function close(symbol: string) {
+    setBusy(symbol);
+    try {
+      await api.closePosition(symbol);
+    } catch {
+      /* errors surface in the Activity/Logs panels */
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="panel">
       <h2>Open Positions ({positions.length})</h2>
@@ -22,6 +37,7 @@ export function OpenPositions({ positions }: { positions: Position[] }) {
               <th>Mark</th>
               <th>uPnL</th>
               <th>Stop</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -36,6 +52,15 @@ export function OpenPositions({ positions }: { positions: Position[] }) {
                   {parseFloat(p.unrealized_pnl).toFixed(2)}
                 </td>
                 <td>{p.stop_loss ? parseFloat(p.stop_loss).toFixed(2) : "—"}</td>
+                <td>
+                  <button
+                    className="btn-sell btn-sm"
+                    disabled={busy === p.symbol}
+                    onClick={() => close(p.symbol)}
+                  >
+                    Close
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

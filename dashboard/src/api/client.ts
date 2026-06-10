@@ -2,6 +2,7 @@
 // Vite dev proxy (and nginx in production) routes them to the FastAPI backend.
 
 import type {
+  Config,
   EquityPoint,
   Health,
   LogEntry,
@@ -11,6 +12,7 @@ import type {
   StrategyPerformance,
   SystemStatus,
   Trade,
+  TradingStats,
 } from "../types";
 
 const BASE = "/api";
@@ -48,6 +50,16 @@ export const api = {
   trades: (limit = 100) => request<Trade[]>(`/trades?limit=${limit}`),
   strategyPerformance: () => request<StrategyPerformance[]>("/strategies/performance"),
   riskStatus: () => request<RiskStatus>("/risk/status"),
+  stats: () => request<TradingStats>("/portfolio/stats"),
+  config: () => request<Config>("/system/config"),
+  closeAll: () =>
+    request<{ detail: string; ok: boolean }>("/system/close-all", { method: "POST" }),
+  pause: () =>
+    request<{ detail: string; ok: boolean }>("/system/pause", { method: "POST" }),
+  unpause: () =>
+    request<{ detail: string; ok: boolean }>("/system/unpause", { method: "POST" }),
+  closePosition: (symbol: string) =>
+    request<{ detail: string; ok: boolean }>(`/positions/${symbol}/close`, { method: "POST" }),
   emergencyStop: () =>
     request<{ detail: string; ok: boolean }>("/system/emergency-stop", { method: "POST" }),
   resume: () =>

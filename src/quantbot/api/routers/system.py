@@ -10,6 +10,7 @@ from quantbot.api.dependencies import AuthDep, StateDep, create_access_token
 from fastapi import Query
 
 from quantbot.api.schemas import (
+    ConfigSchema,
     HealthResponse,
     LogEntry,
     LoginRequest,
@@ -58,15 +59,21 @@ async def login(request: LoginRequest, state: StateDep) -> TokenResponse:
 
 @router.get("/system/status", response_model=SystemStatusSchema, tags=["system"])
 async def system_status(state: StateDep, _: AuthDep) -> SystemStatusSchema:
-    """Return the engine/system status snapshot."""
+    """Return the engine/system status snapshot (with health/heartbeat)."""
     engine = state.trading_engine
+    running = bool(engine and getattr(engine, "running", False))
+    hb: dict = engine.heartbeat() if engine and hasattr(engine, "heartbeat") else {}
     return SystemStatusSchema(
-        running=bool(engine and getattr(engine, "running", False)),
+        running=running,
         trading_mode=state.settings.trading_mode.value,
         symbols=state.settings.symbols,
         strategies=len(state.strategies),
-        connected=bool(engine and getattr(engine, "running", False)),
+        connected=running,
         started_at=state.started_at,
+        paused=bool(hb.get("paused", False)),
+        last_candle_age=hb.get("last_candle_age"),
+        last_trade_age=hb.get("last_trade_age"),
+        active_streams=int(hb.get("active_streams", 0)),
     )
 
 
@@ -137,6 +144,57 @@ async def system_activity(
 
     events = [e for e in LOG_BUFFER.recent(1000) if e.get("event") in _TRADE_EVENTS]
     return [LogEntry(**e) for e in events[-limit:]]
+
+
+@router.post("/system/close-all", response_model=MessageResponse, tags=["system"])
+async def close_all(state: StateDep, _: AuthDep) -> MessageResponse:
+    """Market-close every open position (panic button)."""
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "close_all"):
+        return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
+    n = await engine.close_all()
+    return MessageResponse(detail=f"Closed {n} position(s)")
+
+
+@router.post("/system/pause", response_model=MessageResponse, tags=["system"])
+async def pause_trading(state: StateDep, _: AuthDep) -> MessageResponse:
+    """Pause new entries (existing positions keep being managed)."""
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "pause"):
+        return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
+    engine.pause()
+    return MessageResponse(detail="Trading paused (no new entries)")
+
+
+@router.post("/system/unpause", response_model=MessageResponse, tags=["system"])
+async def unpause_trading(state: StateDep, _: AuthDep) -> MessageResponse:
+    """Resume opening new entries."""
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "resume_trading"):
+        return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
+    engine.resume_trading()
+    return MessageResponse(detail="Trading resumed")
+
+
+@router.get("/system/config", response_model=ConfigSchema, tags=["system"])
+async def system_config(state: StateDep, _: AuthDep) -> ConfigSchema:
+    """Read-only view of the active risk/universe configuration."""
+    r = state.settings.risk
+    return ConfigSchema(
+        sizing_method=r.sizing_method.value,
+        risk_per_trade=str(r.risk_per_trade),
+        default_stop_loss_pct=str(r.default_stop_loss_pct),
+        trailing_stop_pct=str(r.trailing_stop_pct),
+        take_profit_levels=[f"{p}:{s}" for p, s in r.take_profit_levels],
+        max_open_trades=r.max_open_trades,
+        max_exposure_per_coin=str(r.max_exposure_per_coin),
+        max_portfolio_exposure=str(r.max_portfolio_exposure),
+        max_daily_loss=str(r.max_daily_loss),
+        max_drawdown=str(r.max_drawdown),
+        symbols=state.settings.symbols,
+        timeframes=[tf.value for tf in state.settings.timeframes],
+        min_consensus=state.settings.aggregator.min_consensus,
+    )
 
 
 __all__ = ["router"]

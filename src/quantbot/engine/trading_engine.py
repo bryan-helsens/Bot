@@ -34,7 +34,7 @@ from quantbot.core.constants import (
 )
 from quantbot.core.events import Event, EventBus
 from quantbot.core.logging import LoggerMixin
-from quantbot.core.models import Candle, Position, Signal
+from quantbot.core.models import Candle, Position, Signal, utcnow
 from quantbot.data.market_data import MarketDataService
 from quantbot.engine.paper_broker import PaperTradingBroker
 from quantbot.exchanges.base import ExchangeGateway, OrderUpdate
@@ -72,6 +72,9 @@ class TradingEngine(LoggerMixin):
         self._executor = executor
         self._bus = event_bus
         self._running = False
+        self._paused = False  # when True: manage existing positions but open no new ones
+        self._last_candle_at: datetime | None = None
+        self._last_trade_at: datetime | None = None
         self._snapshot_task: asyncio.Task[None] | None = None
         self._user_task: asyncio.Task[None] | None = None
         self._synchronizer = OrderSynchronizer(gateway)
@@ -113,6 +116,8 @@ class TradingEngine(LoggerMixin):
         await self._reconcile_with_exchange()
 
         self._unsubscribe = self._bus.subscribe(EventType.CANDLE_CLOSED, self._on_candle_event)
+        self._bus.subscribe(EventType.TRADE_OPENED, self._on_trade_event)
+        self._bus.subscribe(EventType.TRADE_CLOSED, self._on_trade_event)
         self._running = True
         self._snapshot_task = asyncio.create_task(self._snapshot_loop(), name="equity-snapshots")
         # Consume the authenticated user-data stream so exchange-side fills (notably
@@ -150,6 +155,7 @@ class TradingEngine(LoggerMixin):
     async def process_candle(self, candle: Candle) -> Position | None:
         """Run the full decision cycle for one freshly-closed candle."""
         symbol, timeframe, price = candle.symbol, candle.timeframe, candle.close
+        self._last_candle_at = utcnow()  # heartbeat
 
         # 1. Propagate the new price everywhere that needs it.
         self._portfolio.update_price(symbol, price)
@@ -190,6 +196,8 @@ class TradingEngine(LoggerMixin):
         #    is supported (futures). On spot, a sell with no position is a no-op.
         if result.signal.side is Side.SELL and self._gateway.market is not MarketType.FUTURES:
             return None
+        if self._paused:
+            return None  # paused: keep managing existing positions, open no new ones
 
         atr = self._atr_for(candle)
         position = await self._executor.execute_signal(result.signal, atr=atr)
@@ -217,6 +225,54 @@ class TradingEngine(LoggerMixin):
         if last is None or np.isnan(last) or last <= 0:
             return candle.range or None
         return Decimal(str(float(last)))
+
+    # ------------------------------------------------------------------ control & health
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
+    def pause(self) -> None:
+        """Stop opening NEW positions; existing ones keep being managed."""
+        self._paused = True
+        self.log.info("trading_paused")
+
+    def resume_trading(self) -> None:
+        self._paused = False
+        self.log.info("trading_resumed")
+
+    async def close_all(self) -> int:
+        """Market-close every open position. Returns how many were closed."""
+        positions = list(self._portfolio.positions.all_open())
+        for position in positions:
+            price = self._latest_price(position.symbol) or position.mark_price or position.entry_price
+            try:
+                await self._executor.close_position(position, exit_price=price, reason=ExitReason.MANUAL)
+            except Exception as exc:  # noqa: BLE001 - keep closing the rest
+                self.log.error("close_all_failed", symbol=position.symbol, error=str(exc))
+        return len(positions)
+
+    async def close_symbol(self, symbol: str) -> dict:
+        """Market-close a single open position."""
+        position = self._portfolio.positions.get(symbol)
+        if position is None or not position.is_open:
+            return {"ok": False, "detail": f"No open position for {symbol}"}
+        price = self._latest_price(symbol) or position.mark_price or position.entry_price
+        await self._executor.close_position(position, exit_price=price, reason=ExitReason.MANUAL)
+        return {"ok": True, "detail": f"Closed {symbol} @ {price}"}
+
+    async def _on_trade_event(self, _event: Event) -> None:
+        self._last_trade_at = utcnow()
+
+    def heartbeat(self) -> dict:
+        """Liveness signals for the dashboard health panel."""
+        now = utcnow()
+        return {
+            "paused": self._paused,
+            "last_candle_age": (now - self._last_candle_at).total_seconds() if self._last_candle_at else None,
+            "last_trade_age": (now - self._last_trade_at).total_seconds() if self._last_trade_at else None,
+            "active_streams": self._market_data.stream_count(),
+        }
 
     # ------------------------------------------------------------------ manual / test orders
 

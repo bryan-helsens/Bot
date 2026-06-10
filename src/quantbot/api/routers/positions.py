@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from quantbot.api.dependencies import AuthDep, StateDep
-from quantbot.api.schemas import PositionSchema
+from quantbot.api.schemas import MessageResponse, PositionSchema
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -33,6 +33,16 @@ async def open_positions(state: StateDep, _: AuthDep) -> list[PositionSchema]:
             )
         )
     return out
+
+
+@router.post("/{symbol}/close", response_model=MessageResponse)
+async def close_position(symbol: str, state: StateDep, _: AuthDep) -> MessageResponse:
+    """Market-close a single open position."""
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "close_symbol"):
+        return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
+    result = await engine.close_symbol(symbol.upper())
+    return MessageResponse(detail=result["detail"], ok=bool(result["ok"]))
 
 
 __all__ = ["router"]

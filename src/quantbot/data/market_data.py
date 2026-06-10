@@ -134,6 +134,10 @@ class MarketDataService(LoggerMixin):
 
     # ------------------------------------------------------------------ access
 
+    def stream_count(self) -> int:
+        """Number of live stream consumers currently running."""
+        return len(self._tasks)
+
     def series(self, symbol: str, timeframe: Timeframe) -> CandleSeries:
         """Return (creating if needed) the buffer for ``(symbol, timeframe)``."""
         key = (symbol, timeframe)

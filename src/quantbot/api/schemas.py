@@ -148,6 +148,41 @@ class SystemStatusSchema(BaseModel):
     strategies: int
     connected: bool
     started_at: datetime | None = None
+    paused: bool = False
+    last_candle_age: float | None = None
+    last_trade_age: float | None = None
+    active_streams: int = 0
+
+
+class TradingStatsSchema(BaseModel):
+    """Realised performance summary for the dashboard."""
+
+    today_pnl: str = "0"
+    week_pnl: str = "0"
+    today_trades: int = 0
+    total_trades: int = 0
+    win_rate: float = 0.0
+    total_fees: str = "0"
+    best_trade: str = "0"
+    worst_trade: str = "0"
+
+
+class ConfigSchema(BaseModel):
+    """Read-only view of the active risk/universe configuration."""
+
+    sizing_method: str
+    risk_per_trade: str
+    default_stop_loss_pct: str
+    trailing_stop_pct: str
+    take_profit_levels: list[str]
+    max_open_trades: int
+    max_exposure_per_coin: str
+    max_portfolio_exposure: str
+    max_daily_loss: str
+    max_drawdown: str
+    symbols: list[str]
+    timeframes: list[str]
+    min_consensus: int
 
 
 class MessageResponse(BaseModel):
