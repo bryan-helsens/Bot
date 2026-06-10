@@ -63,7 +63,43 @@ class OrderExecutor(LoggerMixin):
             await self._risk.emit_rejection(signal, _as_limit_check(proposal))
             self.log.info("signal_rejected", symbol=signal.symbol, reason=proposal.reason)
             return None
+        proposal = await self._enforce_min_notional(proposal)
+        if proposal is None:
+            return None
         return await self._open_from_proposal(proposal)
+
+    async def _enforce_min_notional(self, proposal: OrderProposal) -> OrderProposal | None:
+        """Keep an entry order at/above the exchange minimum notional.
+
+        On small accounts the risk-sized order can fall below the exchange's
+        MIN_NOTIONAL and be rejected. Bump it up to the minimum (the smallest valid
+        order — a negligible risk increase) when affordable, otherwise skip the
+        trade cleanly with a clear log instead of letting the exchange reject it.
+        """
+        try:
+            info = await self._gateway.get_symbol_info(proposal.symbol)
+        except Exception:  # noqa: BLE001 - can't check -> proceed and let the exchange decide
+            return proposal
+        min_notional = getattr(info, "min_notional", Decimal("0"))
+        if min_notional <= 0 or proposal.price <= 0 or proposal.quantity <= 0:
+            return proposal
+        notional = proposal.quantity * proposal.price
+        if notional >= min_notional:
+            return proposal
+        target = min_notional * Decimal("1.01")  # small buffer for fees/rounding
+        bumped_qty = target / proposal.price
+        if bumped_qty * proposal.price > self._portfolio.cash:
+            self.log.warning(
+                "order_below_min_notional_skipped", symbol=proposal.symbol,
+                notional=float(notional), min_notional=float(min_notional),
+            )
+            return None
+        self.log.info(
+            "order_bumped_to_min_notional", symbol=proposal.symbol,
+            from_notional=float(notional), to_notional=float(bumped_qty * proposal.price),
+        )
+        proposal.quantity = bumped_qty
+        return proposal
 
     async def _open_from_proposal(self, proposal: OrderProposal) -> Position | None:
         """Place the entry order and open the position from an approved proposal."""
