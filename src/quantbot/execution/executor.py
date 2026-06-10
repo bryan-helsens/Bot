@@ -134,17 +134,6 @@ class OrderExecutor(LoggerMixin):
             # locally on each price tick as a backstop.
             self.log.error("stop_order_failed", symbol=position.symbol, error=str(exc))
 
-    async def _resize_protective_stop(self, position: Position) -> None:
-        """Re-place the resting stop for the (reduced) remaining quantity.
-
-        After a partial take-profit the original stop order still covers the full
-        entry quantity. Cancel it and place a fresh one sized to what is left so the
-        exchange-side stop matches the position and cannot over-sell.
-        """
-        await self._cancel_stop(position)
-        position.meta.pop("stop_order_id", None)
-        await self._place_protective_stop(position)
-
     # ------------------------------------------------------------------ partial exit
 
     async def reduce_position(
@@ -170,6 +159,11 @@ class OrderExecutor(LoggerMixin):
             symbol=position.symbol, side=exit_side, type=OrderType.MARKET,
             quantity=close_qty, reduce_only=True,
         )
+        # Cancel the resting protective stop FIRST — on spot it locks the base asset
+        # and the reduce sell would otherwise fail with -2010 (insufficient free
+        # balance). A fresh stop for the remaining quantity is placed below.
+        await self._cancel_stop(position)
+        position.meta.pop("stop_order_id", None)
         try:
             order = await self._gateway.create_order(request)
         except ExchangeError as exc:
@@ -188,9 +182,8 @@ class OrderExecutor(LoggerMixin):
             self._risk.record_trade_result(position, trade.net_pnl)
             held = self._portfolio.positions.get(position.symbol)
             if held is not None and held.is_open:
-                await self._resize_protective_stop(held)
-            else:
-                await self._cancel_stop(position)  # the reduce fully closed it
+                await self._place_protective_stop(held)  # fresh stop for the remainder
+            # (the old stop was already cancelled above)
             await self._emit(EventType.TRADE_CLOSED, {
                 "symbol": trade.symbol,
                 "net_pnl": str(trade.net_pnl),
@@ -217,6 +210,10 @@ class OrderExecutor(LoggerMixin):
             quantity=position.quantity,
             reduce_only=True,
         )
+        # Cancel the resting protective stop FIRST. On spot it locks the base asset,
+        # so selling to close before cancelling fails with -2010 (insufficient free
+        # balance — it's reserved by the stop order).
+        await self._cancel_stop(position)
         try:
             order = await self._gateway.create_order(request)
         except ExchangeError as exc:
@@ -224,7 +221,6 @@ class OrderExecutor(LoggerMixin):
             raise ExecutionError(f"Close order failed: {exc}") from exc
 
         self._orders.track(order)
-        await self._cancel_stop(position)
 
         fill_price = order.avg_fill_price or exit_price or position.entry_price
         fee = fill_price * position.quantity * self._commission_rate

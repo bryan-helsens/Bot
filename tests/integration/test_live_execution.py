@@ -207,3 +207,43 @@ async def test_manual_order_without_price_is_rejected() -> None:
         symbols=["BTCUSDT"], timeframes=[Timeframe.H1]))
     result = await engine.submit_manual_order("BTCUSDT", Side.BUY)  # no candles fed
     assert result["ok"] is False
+
+
+async def test_close_cancels_protective_stop_before_selling(make_candle) -> None:
+    """On close, the resting stop must be cancelled BEFORE the sell (frees the asset
+    so a spot sell can't fail with -2010 'insufficient balance')."""
+    settings = _settings(take_profit_levels=[(Decimal("0.10"), Decimal("1.0"))], stop_pct="0.05")
+    engine, portfolio, broker, _placed, market_data = _wire(settings, _BuyOnceAt3(
+        symbols=["BTCUSDT"], timeframes=[Timeframe.H1]))
+
+    timeline: list[str] = []
+    orig_create = broker.create_order
+    orig_cancel = broker.cancel_order
+
+    async def create_spy(req):
+        timeline.append(f"create:{req.side.value}:{req.type.value}")
+        return await orig_create(req)
+
+    async def cancel_spy(symbol, **kw):
+        timeline.append("cancel")
+        return await orig_cancel(symbol, **kw)
+
+    broker.create_order = create_spy  # type: ignore[method-assign]
+    broker.cancel_order = cancel_spy  # type: ignore[method-assign]
+
+    # Open via a manual buy (places entry + protective stop), then close.
+    series = market_data.series("BTCUSDT", Timeframe.H1)
+    for i, p in enumerate([100, 100, 100, 100]):
+        c = make_candle(i, p)
+        series.append(c)
+        broker.feed_price("BTCUSDT", c.close)
+    await engine.submit_manual_order("BTCUSDT", Side.BUY)
+    assert portfolio.positions.has_position("BTCUSDT")
+
+    timeline.clear()
+    await engine.submit_manual_order("BTCUSDT", Side.SELL)  # close
+
+    assert "cancel" in timeline, "the protective stop must be cancelled on close"
+    sell = next(i for i, t in enumerate(timeline) if t.startswith("create:sell:market"))
+    cancel = timeline.index("cancel")
+    assert cancel < sell, "stop must be cancelled BEFORE the closing sell"
