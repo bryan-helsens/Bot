@@ -15,8 +15,10 @@
 # docs/TESTNET_PAPER_TRADING.md). Start here; only widen after weeks of clean runs.
 
 strategies:
-  # Single, interpretable strategy so paper results are diagnosable. RSI
-  # mean-reversion: buy oversold bounces, exit on overbought / take-profit / stop.
+  # Strategy 1 — RSI mean-reversion: buy oversold bounces, exit on overbought /
+  # take-profit / stop. oversold=40 (not 30/35) so the cross-up fires more often
+  # during a test — you gather pipeline data in hours, not days. Tighten back to
+  # 30-35 once you've confirmed the signal→order→stop→exit path end-to-end.
   - name: rsi_dip_buyer
     class: RSIStrategy
     market: spot
@@ -28,5 +30,23 @@ strategies:
     timeframes: [5m, 15m]
     params:
       period: 14
-      oversold: 35
+      oversold: 40
       overbought: 70
+
+  # Strategy 2 — EMA trend follower: go long on a golden cross (fast EMA crosses
+  # ABOVE slow). Complements the RSI dip-buyer: RSI catches reversals, EMA catches
+  # trend starts, so the bot trades in more market regimes. A death cross (fast
+  # below slow) on a coin you hold EXITS it (opposite signal closes the long); with
+  # no position it's a no-op on spot (you can't short). 9/21 is responsive on 5m/15m.
+  - name: ema_trend
+    class: EMACrossoverStrategy
+    market: spot
+    enabled: true
+    symbols: []
+    timeframes: [5m, 15m]
+    params:
+      fast_period: 9
+      slow_period: 21
+      # Tiny noise filter: ignore crosses where the EMAs are basically touching.
+      min_gap_pct: 0.0005
+
