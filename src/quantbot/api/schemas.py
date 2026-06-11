@@ -81,6 +81,7 @@ class CoinDetailSchema(BaseModel):
     side: str | None = None
     quantity: str = "0"
     entry_price: str | None = None
+    opened_at: datetime | None = None
     mark_price: str | None = None
     value: str = "0"
     unrealized_pnl: str = "0"
@@ -92,6 +93,7 @@ class CoinDetailSchema(BaseModel):
     trades: list[TradeSchema] = []
     rsi: float | None = None
     prices: list[float] = []
+    times: list[str] = []
     price_timeframe: str | None = None
 
 

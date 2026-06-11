@@ -276,17 +276,20 @@ class TradingEngine(LoggerMixin):
         self._last_trade_at = utcnow()
 
     def coin_market_snapshot(self, symbol: str) -> dict:
-        """Recent closes + current RSI(14) for a coin (smallest timeframe)."""
+        """Recent closes (+ timestamps) and current RSI(14) for a coin."""
         import numpy as np
 
         from quantbot.indicators.momentum import rsi as rsi_fn
 
         if not self._settings.timeframes:
-            return {"rsi": None, "prices": [], "price_timeframe": None}
+            return {"rsi": None, "prices": [], "times": [], "price_timeframe": None}
         tf = min(self._settings.timeframes, key=lambda t: t.seconds)
-        closes = self._market_data.series(symbol, tf).closes()
-        prices = [round(float(c), 8) for c in closes[-60:]]
+        series = self._market_data.series(symbol, tf)
+        candles = series.candles(60)
+        prices = [round(float(c.close), 8) for c in candles]
+        times = [c.open_time.isoformat() for c in candles]
         rsi_val: float | None = None
+        closes = series.closes()
         if len(closes) >= 15:
             try:
                 last = rsi_fn(closes, period=14)[-1]
@@ -294,7 +297,7 @@ class TradingEngine(LoggerMixin):
                     rsi_val = round(float(last), 1)
             except Exception:  # noqa: BLE001
                 rsi_val = None
-        return {"rsi": rsi_val, "prices": prices, "price_timeframe": tf.value}
+        return {"rsi": rsi_val, "prices": prices, "times": times, "price_timeframe": tf.value}
 
     def heartbeat(self) -> dict:
         """Liveness signals for the dashboard health panel."""

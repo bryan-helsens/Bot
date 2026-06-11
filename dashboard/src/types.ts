@@ -30,6 +30,7 @@ export interface CoinDetail {
   side: string | null;
   quantity: string;
   entry_price: string | null;
+  opened_at: string | null;
   mark_price: string | null;
   value: string;
   unrealized_pnl: string;
@@ -41,6 +42,7 @@ export interface CoinDetail {
   trades: Trade[];
   rsi: number | null;
   prices: number[];
+  times: string[];
   price_timeframe: string | null;
 }
 

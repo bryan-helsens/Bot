@@ -109,6 +109,7 @@ async def coin_detail(symbol: str, state: StateDep, _: AuthDep) -> CoinDetailSch
             out.side = pos.side.value
             out.quantity = str(pos.quantity)
             out.entry_price = str(pos.entry_price)
+            out.opened_at = pos.opened_at
             out.mark_price = str(mark)
             out.value = str(pos.quantity * mark)
             out.unrealized_pnl = str(pos.unrealized_pnl(mark))
@@ -119,6 +120,7 @@ async def coin_detail(symbol: str, state: StateDep, _: AuthDep) -> CoinDetailSch
         snap = engine.coin_market_snapshot(symbol)
         out.rsi = snap.get("rsi")
         out.prices = snap.get("prices", [])
+        out.times = snap.get("times", [])
         out.price_timeframe = snap.get("price_timeframe")
 
     trades = [t for t in (state.performance.trades if state.performance else []) if t.symbol == symbol]

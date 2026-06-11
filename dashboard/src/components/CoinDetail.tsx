@@ -2,7 +2,45 @@ import { useState } from "react";
 import { api } from "../api/client";
 import { usePolling } from "../hooks/usePolling";
 import type { CoinDetail as Detail, SystemStatus } from "../types";
-import { PriceChart } from "./PriceChart";
+import { PriceChart, type Marker } from "./PriceChart";
+
+// Map an ISO timestamp to the nearest candle index in the price series.
+function indexFor(times: string[], iso: string | null): number | null {
+  if (!iso || times.length === 0) return null;
+  const t = Date.parse(iso);
+  const first = Date.parse(times[0]);
+  const last = Date.parse(times[times.length - 1]);
+  if (t < first || Number.isNaN(t)) return null; // older than the visible window
+  if (t >= last) return times.length - 1;
+  let best = 0;
+  let bestDiff = Infinity;
+  for (let i = 0; i < times.length; i++) {
+    const diff = Math.abs(Date.parse(times[i]) - t);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = i;
+    }
+  }
+  return best;
+}
+
+const GREEN = "var(--green, #3ddc84)";
+const RED = "var(--red)";
+
+function buildMarkers(d: Detail): Marker[] {
+  const m: Marker[] = [];
+  for (const t of d.trades) {
+    const bi = indexFor(d.times, t.opened_at);
+    if (bi !== null) m.push({ index: bi, value: parseFloat(t.entry_price), color: GREEN, buy: true });
+    const si = indexFor(d.times, t.closed_at);
+    if (si !== null) m.push({ index: si, value: parseFloat(t.exit_price), color: RED, buy: false });
+  }
+  if (d.has_position && d.entry_price) {
+    const oi = indexFor(d.times, d.opened_at);
+    if (oi !== null) m.push({ index: oi, value: parseFloat(d.entry_price), color: GREEN, buy: true });
+  }
+  return m;
+}
 
 function rsiClass(rsi: number | null): string {
   if (rsi === null) return "";
@@ -60,6 +98,7 @@ export function CoinDetail() {
                   ? [{ value: parseFloat(data.stop_loss), color: "var(--red)", label: "stop" }]
                   : []),
               ]}
+              markers={buildMarkers(data)}
             />
           </div>
           <table>
