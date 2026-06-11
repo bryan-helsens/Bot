@@ -454,8 +454,12 @@ class TradingEngine(LoggerMixin):
                 o for o in self._executor.orders.all_orders() if not o.status.is_terminal
             ]
             local_positions = list(self._portfolio.positions.all_open())
+            # Query ONLY symbols that actually warmed up. Asking the exchange about
+            # a coin it doesn't list (e.g. MATIC/FTM/MKR/RNDR off the testnet)
+            # raises -1121 Invalid symbol and previously aborted the whole pass.
+            symbols = self._market_data.active_symbols() or list(self._settings.symbols)
             result = await self._synchronizer.reconcile(
-                local_orders, local_positions, symbols=self._settings.symbols
+                local_orders, local_positions, symbols=symbols
             )
             # Only act on "stale" positions for FUTURES, where get_positions() is
             # authoritative. On SPOT it always returns [] (spot has no position
@@ -496,7 +500,10 @@ class TradingEngine(LoggerMixin):
             cfg = self._settings.risk
             typical = equity * cfg.risk_per_trade / cfg.default_stop_loss_pct
             too_small: list[str] = []
-            for symbol in self._settings.symbols:
+            # Only warn about coins that actually warmed up; unlisted ones were
+            # already skipped (warmup_skip_symbol) and never trade anyway.
+            symbols = self._market_data.active_symbols() or list(self._settings.symbols)
+            for symbol in symbols:
                 try:
                     info = await self._gateway.get_symbol_info(symbol)
                 except Exception:  # noqa: BLE001 - unknown symbol: already skipped elsewhere

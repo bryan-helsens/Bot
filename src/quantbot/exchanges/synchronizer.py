@@ -103,11 +103,21 @@ class OrderSynchronizer(LoggerMixin):
     # ------------------------------------------------------------------ orders
 
     async def _fetch_open_orders(self, symbols: list[str] | None) -> dict[str, Order]:
-        """Fetch open orders from the exchange keyed by exchange order id."""
+        """Fetch open orders from the exchange keyed by exchange order id.
+
+        Resilient per symbol: a symbol the exchange rejects (e.g. -1121 Invalid
+        symbol for a coin not listed on the testnet) is logged and skipped so one
+        bad symbol can't abort the whole reconciliation pass.
+        """
         orders: list[Order] = []
         if symbols:
             for symbol in symbols:
-                orders.extend(await self._gateway.get_open_orders(symbol))
+                try:
+                    orders.extend(await self._gateway.get_open_orders(symbol))
+                except Exception as exc:  # noqa: BLE001 - skip bad symbol, keep the rest
+                    self.log.warning(
+                        "open_orders_fetch_skipped", symbol=symbol, error=str(exc)
+                    )
         else:
             orders.extend(await self._gateway.get_open_orders())
         return {self._key(o): o for o in orders}

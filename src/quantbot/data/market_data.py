@@ -138,6 +138,13 @@ class MarketDataService(LoggerMixin):
         """Number of live stream consumers currently running."""
         return len(self._tasks)
 
+    def active_symbols(self) -> list[str]:
+        """Symbols that actually warmed up (exclude ones the exchange rejected)."""
+        seen: dict[str, None] = {}
+        for symbol, _tf in self._active:
+            seen.setdefault(symbol, None)
+        return list(seen)
+
     def series(self, symbol: str, timeframe: Timeframe) -> CandleSeries:
         """Return (creating if needed) the buffer for ``(symbol, timeframe)``."""
         key = (symbol, timeframe)
