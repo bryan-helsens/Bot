@@ -416,16 +416,18 @@ class TradingEngine(LoggerMixin):
         if not decision.should_exit:
             return
 
-        if decision.exit_fraction >= Decimal("1"):
-            await self._executor.close_position(position, exit_price=price, reason=decision.exit_reason)
-        else:
-            # Partial take-profit: place a REAL reduce order through the executor.
-            # Reducing the books locally (without an order) would desync the bot's
-            # view from the actual exchange holding — a live-trading hazard.
-            await self._executor.reduce_position(
-                position, fraction=decision.exit_fraction, exit_price=price,
-                reason=decision.exit_reason, tp_index=decision.triggered_tp_index,
-            )
+        # An exit failure on ONE symbol must not crash the whole candle cycle (other
+        # positions still need managing); log it and move on.
+        try:
+            if decision.exit_fraction >= Decimal("1"):
+                await self._executor.close_position(position, exit_price=price, reason=decision.exit_reason)
+            else:
+                await self._executor.reduce_position(
+                    position, fraction=decision.exit_fraction, exit_price=price,
+                    reason=decision.exit_reason, tp_index=decision.triggered_tp_index,
+                )
+        except Exception as exc:  # noqa: BLE001 - isolate per-symbol exit failures
+            self.log.error("position_exit_failed", symbol=symbol, error=str(exc))
 
     async def _flatten_all(self) -> None:
         for position in list(self._portfolio.positions.all_open()):

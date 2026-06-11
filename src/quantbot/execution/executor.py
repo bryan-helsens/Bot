@@ -117,12 +117,16 @@ class OrderExecutor(LoggerMixin):
 
         self._orders.track(order)
         fill_price = order.avg_fill_price or proposal.price
-        fee = fill_price * proposal.quantity * self._commission_rate
+        # Record the ACTUAL filled quantity, not the requested one. On a thin pair
+        # the exchange may fill less than asked; recording the request would make the
+        # bot think it holds more than it does (and later fail to sell it).
+        filled_qty = order.filled_qty if order.filled_qty and order.filled_qty > 0 else proposal.quantity
+        fee = fill_price * filled_qty * self._commission_rate
 
         position = self._portfolio.positions.open_position(
             symbol=proposal.symbol,
             side=proposal.side,
-            quantity=proposal.quantity,
+            quantity=filled_qty,
             entry_price=fill_price,
             strategy=None,
             stop_loss=proposal.stop_loss,
@@ -203,6 +207,12 @@ class OrderExecutor(LoggerMixin):
         try:
             order = await self._gateway.create_order(request)
         except ExchangeError as exc:
+            if _is_dust_error(exc):
+                # The slice to take profit on is too small to trade — keep the whole
+                # position and re-place its protective stop; skip this rung.
+                self.log.warning("reduce_skipped_dust", symbol=position.symbol, error=str(exc))
+                await self._place_protective_stop(position)
+                return None
             self.log.error("reduce_order_failed", symbol=position.symbol, error=str(exc))
             raise ExecutionError(f"Reduce order failed: {exc}") from exc
 
@@ -253,6 +263,13 @@ class OrderExecutor(LoggerMixin):
         try:
             order = await self._gateway.create_order(request)
         except ExchangeError as exc:
+            if _is_dust_error(exc):
+                # The remaining holding is too small to sell (below the exchange's
+                # minimum). Close it in the books at the mark price so the bot stops
+                # retrying every candle; the unsellable dust stays on the account.
+                self.log.warning("closed_locally_dust", symbol=position.symbol, error=str(exc))
+                await self._finalise_close(position, exit_price or position.entry_price, reason)
+                return None
             self.log.error("close_order_failed", symbol=position.symbol, error=str(exc))
             raise ExecutionError(f"Close order failed: {exc}") from exc
 
@@ -273,6 +290,19 @@ class OrderExecutor(LoggerMixin):
                 "reason": reason.value,
             })
         return order
+
+    async def _finalise_close(self, position: Position, fill_price: Decimal, reason) -> None:
+        """Close a position in the books only (no exchange order) — used for dust."""
+        trade = self._portfolio.positions.close_position(
+            position.symbol, exit_price=fill_price, reason=reason, fee=Decimal("0"),
+        )
+        if trade is not None:
+            self._portfolio.apply_trade(trade)
+            self._risk.record_trade_result(position, trade.net_pnl)
+            await self._emit(EventType.TRADE_CLOSED, {
+                "symbol": trade.symbol, "net_pnl": str(trade.net_pnl),
+                "exit_price": str(trade.exit_price), "reason": reason.value, "dust": True,
+            })
 
     async def apply_external_close(
         self, position: Position, *, fill_price: Decimal, fee: Decimal = Decimal("0"), reason=None
@@ -323,6 +353,13 @@ def _as_limit_check(proposal: OrderProposal):
     from quantbot.risk.limits import LimitCheck
 
     return LimitCheck(False, proposal.event_type, proposal.reason)
+
+
+def _is_dust_error(exc: ExchangeError) -> bool:
+    """Whether an order failed because the amount is too small to trade (dust)."""
+    code = getattr(exc, "code", None)
+    msg = str(exc).upper()
+    return code in (-1013,) or "NOTIONAL" in msg or "LOT_SIZE" in msg or "MIN_NOTIONAL" in msg
 
 
 __all__ = ["OrderExecutor"]
