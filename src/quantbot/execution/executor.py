@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from quantbot.core.constants import OrderType, Side
+from quantbot.core.constants import MarketType, OrderType, Side
 from quantbot.core.events import Event, EventBus
 from quantbot.core.constants import EventType
 from quantbot.core.exceptions import ExchangeError, ExecutionError
@@ -137,6 +137,16 @@ class OrderExecutor(LoggerMixin):
         # Cash moves only when PnL is realised (on close); the entry fee is
         # carried on the position and reflected in equity via unrealised PnL.
 
+        # On LIVE spot, verify the booked quantity against the real account balance
+        # and correct it. On thin meme pairs the exchange can fill far less than
+        # asked; without this the books inflate (phantom holding -> inflated equity
+        # -> ever-bigger buys -> can't sell -> NOTIONAL errors).
+        await self._verify_spot_fill(position)
+        position = self._portfolio.positions.get(proposal.symbol)
+        if position is None or not position.is_open:
+            self.log.warning("entry_dropped_no_fill", symbol=proposal.symbol)
+            return None
+
         await self._place_protective_stop(position)
         await self._emit(EventType.TRADE_OPENED, {
             "symbol": position.symbol,
@@ -150,6 +160,40 @@ class OrderExecutor(LoggerMixin):
             qty=float(position.quantity), entry=float(position.entry_price),
         )
         return position
+
+    async def _verify_spot_fill(self, position: Position) -> None:
+        """Correct a spot position's quantity to the actual account balance.
+
+        Only for a real spot gateway (skipped for the paper broker, whose base
+        balance is always 0). If we hold far less of the base asset than the books
+        say, the order under-filled — correct the quantity (or drop the position if
+        nothing filled) so the books match reality.
+        """
+        from quantbot.engine.paper_broker import PaperTradingBroker
+
+        if getattr(self._gateway, "market", None) is not MarketType.SPOT:
+            return
+        if isinstance(self._gateway, PaperTradingBroker):
+            return
+        try:
+            info = await self._gateway.get_symbol_info(position.symbol)
+            bal = await self._gateway.get_balance(info.base_asset)
+            held = bal.free + bal.locked
+        except Exception as exc:  # noqa: BLE001 - best-effort; leave books as-is
+            self.log.warning("spot_fill_verify_skipped", symbol=position.symbol, error=str(exc))
+            return
+        if held >= position.quantity * Decimal("0.9"):
+            return  # books match reality (within 10%)
+        if held <= 0:
+            self.log.warning("spot_fill_none_dropping", symbol=position.symbol,
+                             booked=float(position.quantity))
+            self._portfolio.positions.close_position(
+                position.symbol, exit_price=position.entry_price, fee=Decimal("0"),
+            )
+            return
+        self.log.warning("spot_fill_corrected", symbol=position.symbol,
+                         booked=float(position.quantity), actual=float(held))
+        position.quantity = held
 
     async def _place_protective_stop(self, position: Position) -> None:
         """Best-effort placement of the protective stop-loss order."""
