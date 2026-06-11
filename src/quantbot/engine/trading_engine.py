@@ -115,6 +115,10 @@ class TradingEngine(LoggerMixin):
         # fired or an order filled while we were down/disconnected.
         await self._reconcile_with_exchange()
 
+        # Warn up-front which configured coins can't be traded with this capital
+        # (their exchange minimum order exceeds the bot's typical order size).
+        await self._warn_unaffordable_symbols()
+
         self._unsubscribe = self._bus.subscribe(EventType.CANDLE_CLOSED, self._on_candle_event)
         self._bus.subscribe(EventType.TRADE_OPENED, self._on_trade_event)
         self._bus.subscribe(EventType.TRADE_CLOSED, self._on_trade_event)
@@ -478,6 +482,37 @@ class TradingEngine(LoggerMixin):
                 )
         except Exception as exc:  # noqa: BLE001 - reconciliation must never crash startup
             self.log.error("reconcile_failed", error=str(exc))
+
+    async def _warn_unaffordable_symbols(self) -> None:
+        """Log which configured symbols can't meet the exchange minimum order size.
+
+        Typical order notional = equity * risk_per_trade / stop. A symbol whose
+        MIN_NOTIONAL exceeds that will have every entry either bumped up (slightly
+        more risk) or skipped — better to know that at startup than wonder later
+        why a coin never trades.
+        """
+        try:
+            equity = self._portfolio.equity()
+            cfg = self._settings.risk
+            typical = equity * cfg.risk_per_trade / cfg.default_stop_loss_pct
+            too_small: list[str] = []
+            for symbol in self._settings.symbols:
+                try:
+                    info = await self._gateway.get_symbol_info(symbol)
+                except Exception:  # noqa: BLE001 - unknown symbol: already skipped elsewhere
+                    continue
+                if info.min_notional > 0 and info.min_notional > typical:
+                    too_small.append(f"{symbol}(min {info.min_notional})")
+            if too_small:
+                self.log.warning(
+                    "symbols_below_min_notional",
+                    typical_order=float(typical),
+                    symbols=", ".join(too_small),
+                    hint="orders for these are bumped to the minimum or skipped; "
+                         "raise RISK__RISK_PER_TRADE or remove them from SYMBOLS",
+                )
+        except Exception as exc:  # noqa: BLE001 - advisory only, never block startup
+            self.log.debug("min_notional_check_skipped", error=str(exc))
 
     async def _reconcile_spot_positions(self) -> None:
         """Verify spot positions against base-asset balances; close locally ONLY

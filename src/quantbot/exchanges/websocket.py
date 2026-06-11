@@ -98,6 +98,11 @@ class WebSocketManager(LoggerMixin):
         self._connected = asyncio.Event()
         self._closing = False
         self._last_message_at = 0.0
+        # Batch live subscribes: Binance allows only ~5 inbound messages/sec, so a
+        # large basket (60+ coins x timeframes) subscribing one-by-one would get
+        # the connection dropped. Pending streams are flushed in ONE message.
+        self._pending_subs: set[str] = set()
+        self._flush_task: asyncio.Task[None] | None = None
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -139,10 +144,19 @@ class WebSocketManager(LoggerMixin):
             queue = _StreamQueue(stream)
             self._streams[stream] = queue
             if self._connected.is_set():
-                asyncio.create_task(  # noqa: RUF006 - fire-and-forget send
-                    self._send_subscribe([stream])
-                )
+                # Debounced batch: collect a burst of subscribes into one message
+                # (Binance drops connections that send >~5 messages/sec).
+                self._pending_subs.add(stream)
+                if self._flush_task is None or self._flush_task.done():
+                    self._flush_task = asyncio.create_task(self._flush_subscribes())
         return queue
+
+    async def _flush_subscribes(self) -> None:
+        await asyncio.sleep(0.25)  # let the burst accumulate
+        pending = sorted(self._pending_subs)
+        self._pending_subs.clear()
+        if pending and self._connected.is_set():
+            await self._send_subscribe(pending)
 
     async def unsubscribe(self, stream: str) -> None:
         """Remove a subscription and close its queue."""
