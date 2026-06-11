@@ -453,16 +453,24 @@ class TradingEngine(LoggerMixin):
             result = await self._synchronizer.reconcile(
                 local_orders, local_positions, symbols=self._settings.symbols
             )
-            for position in result.stale_positions:
-                held = self._portfolio.positions.get(position.symbol)
-                if held is not None and held.is_open:
-                    price = (
-                        self._portfolio.price_of(position.symbol)
-                        or held.mark_price or held.entry_price
-                    )
-                    await self._executor.apply_external_close(
-                        held, fill_price=price, reason=ExitReason.MANUAL
-                    )
+            # Only act on "stale" positions for FUTURES, where get_positions() is
+            # authoritative. On SPOT it always returns [] (spot has no position
+            # concept — holdings are balances), so EVERY restored position would
+            # look stale and get wrongly closed on restart. Spot positions are
+            # verified against base-asset balances instead.
+            if self._gateway.market is MarketType.FUTURES:
+                for position in result.stale_positions:
+                    held = self._portfolio.positions.get(position.symbol)
+                    if held is not None and held.is_open:
+                        price = (
+                            self._portfolio.price_of(position.symbol)
+                            or held.mark_price or held.entry_price
+                        )
+                        await self._executor.apply_external_close(
+                            held, fill_price=price, reason=ExitReason.MANUAL
+                        )
+            else:
+                await self._reconcile_spot_positions()
             if result.orphan_positions or result.orphan_orders:
                 self.log.warning(
                     "reconcile_orphans_detected",
@@ -470,6 +478,27 @@ class TradingEngine(LoggerMixin):
                 )
         except Exception as exc:  # noqa: BLE001 - reconciliation must never crash startup
             self.log.error("reconcile_failed", error=str(exc))
+
+    async def _reconcile_spot_positions(self) -> None:
+        """Verify spot positions against base-asset balances; close locally ONLY
+        those whose balance is effectively gone (e.g. sold manually). Conservative
+        on purpose — it must never close a position we genuinely still hold."""
+        try:
+            account = await self._gateway.get_account()
+        except Exception as exc:  # noqa: BLE001 - skip if the account can't be read
+            self.log.warning("spot_reconcile_skipped", error=str(exc))
+            return
+        quote = self._settings.quote_asset
+        for position in list(self._portfolio.positions.all_open()):
+            sym = position.symbol
+            base = sym[: -len(quote)] if sym.endswith(quote) else sym
+            held = account.balance_of(base).total if base else position.quantity
+            # We hold <1% of what the books say -> the position is really gone.
+            if held < position.quantity * Decimal("0.01"):
+                price = self._portfolio.price_of(sym) or position.mark_price or position.entry_price
+                self.log.info("spot_position_gone", symbol=sym, held=float(held),
+                              expected=float(position.quantity))
+                await self._executor.apply_external_close(position, fill_price=price, reason=ExitReason.MANUAL)
 
     async def _user_event_loop(self) -> None:
         """Apply exchange-side order fills (a fired stop) to the local books.

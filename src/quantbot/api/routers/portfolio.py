@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter
 
-from quantbot.api.dependencies import AuthDep, StateDep
+from quantbot.api.dependencies import AuthDep, StateDep, trade_history
 from quantbot.api.schemas import (
     CoinDetailSchema,
     DailyPnlPoint,
@@ -51,7 +51,7 @@ async def equity_curve(state: StateDep, _: AuthDep) -> list[EquityPoint]:
 @router.get("/stats", response_model=TradingStatsSchema)
 async def trading_stats(state: StateDep, _: AuthDep) -> TradingStatsSchema:
     """Realised performance: today/week PnL, trade count, win rate, fees."""
-    trades = list(state.performance.trades) if state.performance is not None else []
+    trades = trade_history(state)
     if not trades:
         return TradingStatsSchema()
     now = datetime.now(UTC)
@@ -80,7 +80,7 @@ async def trading_stats(state: StateDep, _: AuthDep) -> TradingStatsSchema:
 @router.get("/daily-pnl", response_model=list[DailyPnlPoint])
 async def daily_pnl(state: StateDep, _: AuthDep, days: int = 30) -> list[DailyPnlPoint]:
     """Realised PnL per day (last *days*) from closed trades, for the bar chart."""
-    trades = list(state.performance.trades) if state.performance is not None else []
+    trades = trade_history(state)
     if not trades:
         return []
     buckets: dict[str, list[Decimal]] = {}
@@ -123,7 +123,7 @@ async def coin_detail(symbol: str, state: StateDep, _: AuthDep) -> CoinDetailSch
         out.times = snap.get("times", [])
         out.price_timeframe = snap.get("price_timeframe")
 
-    trades = [t for t in (state.performance.trades if state.performance else []) if t.symbol == symbol]
+    trades = [t for t in trade_history(state) if t.symbol == symbol]
     if trades:
         wins = sum(1 for t in trades if t.net_pnl > 0)
         out.realized_pnl = str(sum((t.net_pnl for t in trades), Decimal("0")))

@@ -55,6 +55,16 @@ def get_state() -> AppState:
     return _state
 
 
+def trade_history(state: AppState) -> list:
+    """Closed-trade history from the (persisted) portfolio, else the perf tracker."""
+    pf = state.portfolio
+    if pf is not None and hasattr(pf, "closed_trades"):
+        return pf.closed_trades
+    if state.performance is not None:
+        return list(state.performance.trades)
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------

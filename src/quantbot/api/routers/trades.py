@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from quantbot.api.dependencies import AuthDep, StateDep
+from quantbot.api.dependencies import AuthDep, StateDep, trade_history
 from quantbot.api.schemas import TradeSchema
 
 router = APIRouter(prefix="/trades", tags=["trades"])
@@ -23,8 +23,8 @@ async def recent_trades(
 
         async with state.database.session() as session:
             trades = await TradeRepository(session).recent(limit=limit)
-    elif state.performance is not None:
-        trades = list(reversed(state.performance.trades))[:limit]
+    else:
+        trades = list(reversed(trade_history(state)))[:limit]
 
     return [
         TradeSchema(

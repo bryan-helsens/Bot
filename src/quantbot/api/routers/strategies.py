@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from quantbot.api.dependencies import AuthDep, StateDep
+from quantbot.api.dependencies import AuthDep, StateDep, trade_history
 from quantbot.api.schemas import StrategyPerformanceSchema
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
@@ -28,11 +28,11 @@ async def list_strategies(state: StateDep, _: AuthDep) -> list[dict]:
 @router.get("/performance", response_model=list[StrategyPerformanceSchema])
 async def strategy_performance(state: StateDep, _: AuthDep) -> list[StrategyPerformanceSchema]:
     """Aggregate realised performance per strategy from trade history."""
-    perf = state.performance
-    if perf is None:
+    history = trade_history(state)
+    if not history:
         return []
     by_strategy: dict[str, list] = {}
-    for trade in perf.trades:
+    for trade in history:
         by_strategy.setdefault(trade.strategy or "unknown", []).append(trade)
 
     from quantbot.portfolio.performance import PerformanceTracker

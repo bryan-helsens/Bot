@@ -38,6 +38,7 @@ class PortfolioManager(LoggerMixin):
         self._fees_paid = Decimal("0")
         self.positions = PositionManager()
         self._snapshots: deque[AccountSnapshot] = deque(maxlen=snapshot_history)
+        self._closed_trades: deque[Trade] = deque(maxlen=2000)
         self._peak_equity = starting_balance
         self._prices: dict[str, Decimal] = {}
 
@@ -70,10 +71,16 @@ class PortfolioManager(LoggerMixin):
         self._realized_pnl += trade.net_pnl
         self._fees_paid += trade.fees
         self._cash += trade.net_pnl
+        self._closed_trades.append(trade)
         self.log.debug(
             "trade_applied", symbol=trade.symbol, net_pnl=float(trade.net_pnl),
             realized_total=float(self._realized_pnl),
         )
+
+    @property
+    def closed_trades(self) -> list[Trade]:
+        """Realised (closed) trade history, oldest first."""
+        return list(self._closed_trades)
 
     def adjust_capital(self, amount: Decimal) -> Decimal:
         """Record a deposit (positive) or withdrawal (negative) of capital.
@@ -196,11 +203,12 @@ class PortfolioManager(LoggerMixin):
             "prices": {sym: str(price) for sym, price in self._prices.items()},
             "positions": [p.model_dump(mode="json") for p in self.positions.all_open()],
             "snapshots": [s.model_dump(mode="json") for s in list(self._snapshots)[-2000:]],
+            "closed_trades": [t.model_dump(mode="json") for t in self._closed_trades],
         }
 
     def import_state(self, state: dict) -> None:
         """Restore account state produced by :meth:`export_state`."""
-        from quantbot.core.models import AccountSnapshot, Position
+        from quantbot.core.models import AccountSnapshot, Position, Trade
 
         self._starting_balance = Decimal(str(state.get("starting_balance", self._starting_balance)))
         self._cash = Decimal(str(state["cash"]))
@@ -212,6 +220,9 @@ class PortfolioManager(LoggerMixin):
         self._snapshots.clear()
         for snap in state.get("snapshots", []):
             self._snapshots.append(AccountSnapshot.model_validate(snap))
+        self._closed_trades.clear()
+        for t in state.get("closed_trades", []):
+            self._closed_trades.append(Trade.model_validate(t))
 
     # ------------------------------------------------------------------ risk view
 

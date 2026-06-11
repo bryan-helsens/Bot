@@ -95,3 +95,12 @@ def test_withdraw_more_than_cash_is_rejected() -> None:
     import pytest
     with pytest.raises(ValueError):
         pf.adjust_capital(Decimal("-200"))
+
+
+def test_closed_trades_persist() -> None:
+    pf = _seed()  # _seed closes one ETHUSDT trade
+    assert len(pf.closed_trades) == 1
+    restored = PortfolioManager(starting_balance=Decimal("1"))
+    restored.import_state(pf.export_state())
+    assert len(restored.closed_trades) == 1
+    assert restored.closed_trades[0].symbol == "ETHUSDT"
