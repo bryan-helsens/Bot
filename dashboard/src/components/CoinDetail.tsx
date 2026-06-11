@@ -2,6 +2,14 @@ import { useState } from "react";
 import { api } from "../api/client";
 import { usePolling } from "../hooks/usePolling";
 import type { CoinDetail as Detail, SystemStatus } from "../types";
+import { PriceChart } from "./PriceChart";
+
+function rsiClass(rsi: number | null): string {
+  if (rsi === null) return "";
+  if (rsi < 35) return "pos"; // oversold -> buy zone
+  if (rsi > 70) return "neg"; // overbought
+  return "";
+}
 
 const n = (v: string | null | undefined, d = 2) =>
   v === null || v === undefined ? "—" : parseFloat(v).toLocaleString(undefined, { maximumFractionDigits: 6, minimumFractionDigits: d });
@@ -34,6 +42,26 @@ export function CoinDetail() {
         <div className="empty">…</div>
       ) : (
         <>
+          <div style={{ marginBottom: 12 }}>
+            <div className="coin-rsi">
+              RSI(14){data.price_timeframe ? ` · ${data.price_timeframe}` : ""}:{" "}
+              <span className={`value ${rsiClass(data.rsi)}`}>
+                {data.rsi === null ? "—" : data.rsi.toFixed(1)}
+              </span>
+              <span className="muted"> (buy &lt;35 · sell &gt;70)</span>
+            </div>
+            <PriceChart
+              prices={data.prices}
+              refs={[
+                ...(data.has_position && data.entry_price
+                  ? [{ value: parseFloat(data.entry_price), color: "var(--green, #3ddc84)", label: "entry" }]
+                  : []),
+                ...(data.has_position && data.stop_loss
+                  ? [{ value: parseFloat(data.stop_loss), color: "var(--red)", label: "stop" }]
+                  : []),
+              ]}
+            />
+          </div>
           <table>
             <tbody>
               <tr><th>Open position</th><td>

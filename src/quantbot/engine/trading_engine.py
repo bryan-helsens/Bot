@@ -275,6 +275,27 @@ class TradingEngine(LoggerMixin):
     async def _on_trade_event(self, _event: Event) -> None:
         self._last_trade_at = utcnow()
 
+    def coin_market_snapshot(self, symbol: str) -> dict:
+        """Recent closes + current RSI(14) for a coin (smallest timeframe)."""
+        import numpy as np
+
+        from quantbot.indicators.momentum import rsi as rsi_fn
+
+        if not self._settings.timeframes:
+            return {"rsi": None, "prices": [], "price_timeframe": None}
+        tf = min(self._settings.timeframes, key=lambda t: t.seconds)
+        closes = self._market_data.series(symbol, tf).closes()
+        prices = [round(float(c), 8) for c in closes[-60:]]
+        rsi_val: float | None = None
+        if len(closes) >= 15:
+            try:
+                last = rsi_fn(closes, period=14)[-1]
+                if last is not None and not np.isnan(last):
+                    rsi_val = round(float(last), 1)
+            except Exception:  # noqa: BLE001
+                rsi_val = None
+        return {"rsi": rsi_val, "prices": prices, "price_timeframe": tf.value}
+
     def heartbeat(self) -> dict:
         """Liveness signals for the dashboard health panel."""
         now = utcnow()

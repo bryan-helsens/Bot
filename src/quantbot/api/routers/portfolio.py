@@ -114,6 +114,13 @@ async def coin_detail(symbol: str, state: StateDep, _: AuthDep) -> CoinDetailSch
             out.unrealized_pnl = str(pos.unrealized_pnl(mark))
             out.stop_loss = str(pos.stop_loss) if pos.stop_loss is not None else None
 
+    engine = state.trading_engine
+    if engine is not None and hasattr(engine, "coin_market_snapshot"):
+        snap = engine.coin_market_snapshot(symbol)
+        out.rsi = snap.get("rsi")
+        out.prices = snap.get("prices", [])
+        out.price_timeframe = snap.get("price_timeframe")
+
     trades = [t for t in (state.performance.trades if state.performance else []) if t.symbol == symbol]
     if trades:
         wins = sum(1 for t in trades if t.net_pnl > 0)

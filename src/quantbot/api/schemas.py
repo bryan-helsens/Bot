@@ -90,6 +90,9 @@ class CoinDetailSchema(BaseModel):
     win_rate: float = 0.0
     total_fees: str = "0"
     trades: list[TradeSchema] = []
+    rsi: float | None = None
+    prices: list[float] = []
+    price_timeframe: str | None = None
 
 
 class PositionSchema(BaseModel):

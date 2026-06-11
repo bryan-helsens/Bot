@@ -39,6 +39,9 @@ export interface CoinDetail {
   win_rate: number;
   total_fees: string;
   trades: Trade[];
+  rsi: number | null;
+  prices: number[];
+  price_timeframe: string | null;
 }
 
 export interface TradingStats {
