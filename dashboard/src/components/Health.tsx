@@ -22,7 +22,7 @@ export function Health() {
   const { data: status } = usePolling<SystemStatus>(() => api.systemStatus(), 4000);
   const { data: stats } = usePolling<TradingStats>(() => api.stats(), 5000);
 
-  const candleStale = (status?.last_candle_age ?? 0) > 180;
+  const candleStale = status?.candle_stale ?? false;
   const today = stats ? money(stats.today_pnl) : null;
   const week = stats ? money(stats.week_pnl) : null;
 
@@ -36,16 +36,20 @@ export function Health() {
             <td className={candleStale ? "neg" : "pos"}>{age(status?.last_candle_age ?? null)}</td>
           </tr>
           <tr>
-            <th>Last trade</th>
+            <th>Last entry/exit</th>
             <td>{age(status?.last_trade_age ?? null)}</td>
+          </tr>
+          <tr>
+            <th>Open positions</th>
+            <td>{status?.open_positions ?? 0}</td>
           </tr>
           <tr>
             <th>Live streams</th>
             <td>{status?.active_streams ?? 0}</td>
           </tr>
           <tr>
-            <th>PnL today</th>
-            <td className={today?.cls}>{today?.text ?? "—"} <span className="muted">({stats?.today_trades ?? 0} trades)</span></td>
+            <th>PnL today (closed)</th>
+            <td className={today?.cls}>{today?.text ?? "—"} <span className="muted">({stats?.today_trades ?? 0} closed)</span></td>
           </tr>
           <tr>
             <th>PnL this week</th>

@@ -20,6 +20,25 @@ export interface SystemStatus {
   last_candle_age: number | null;
   last_trade_age: number | null;
   active_streams: number;
+  open_positions: number;
+  candle_stale: boolean;
+}
+
+export interface CoinDetail {
+  symbol: string;
+  has_position: boolean;
+  side: string | null;
+  quantity: string;
+  entry_price: string | null;
+  mark_price: string | null;
+  value: string;
+  unrealized_pnl: string;
+  stop_loss: string | null;
+  realized_pnl: string;
+  trade_count: number;
+  win_rate: number;
+  total_fees: string;
+  trades: Trade[];
 }
 
 export interface TradingStats {

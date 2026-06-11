@@ -75,6 +75,8 @@ async def system_status(state: StateDep, _: AuthDep) -> SystemStatusSchema:
         last_candle_age=hb.get("last_candle_age"),
         last_trade_age=hb.get("last_trade_age"),
         active_streams=int(hb.get("active_streams", 0)),
+        open_positions=int(hb.get("open_positions", 0)),
+        candle_stale=bool(hb.get("candle_stale", False)),
     )
 
 

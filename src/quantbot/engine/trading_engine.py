@@ -278,11 +278,18 @@ class TradingEngine(LoggerMixin):
     def heartbeat(self) -> dict:
         """Liveness signals for the dashboard health panel."""
         now = utcnow()
+        last_candle_age = (now - self._last_candle_at).total_seconds() if self._last_candle_at else None
+        # A 5m candle only closes every 5 min, so "stale" must be relative to the
+        # smallest configured timeframe — not a fixed 3 min (which false-alarms).
+        tf_secs = min((tf.seconds for tf in self._settings.timeframes), default=300)
+        stale_threshold = tf_secs * 2.5 + 60
         return {
             "paused": self._paused,
-            "last_candle_age": (now - self._last_candle_at).total_seconds() if self._last_candle_at else None,
+            "last_candle_age": last_candle_age,
             "last_trade_age": (now - self._last_trade_at).total_seconds() if self._last_trade_at else None,
             "active_streams": self._market_data.stream_count(),
+            "open_positions": self._portfolio.positions.open_count,
+            "candle_stale": last_candle_age is not None and last_candle_age > stale_threshold,
         }
 
     # ------------------------------------------------------------------ manual / test orders

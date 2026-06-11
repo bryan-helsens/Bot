@@ -73,6 +73,25 @@ class TradeSchema(BaseModel):
     closed_at: datetime
 
 
+class CoinDetailSchema(BaseModel):
+    """Everything the bot did with one coin: position + trade history + stats."""
+
+    symbol: str
+    has_position: bool = False
+    side: str | None = None
+    quantity: str = "0"
+    entry_price: str | None = None
+    mark_price: str | None = None
+    value: str = "0"
+    unrealized_pnl: str = "0"
+    stop_loss: str | None = None
+    realized_pnl: str = "0"
+    trade_count: int = 0
+    win_rate: float = 0.0
+    total_fees: str = "0"
+    trades: list[TradeSchema] = []
+
+
 class PositionSchema(BaseModel):
     """An open position."""
 
@@ -166,6 +185,8 @@ class SystemStatusSchema(BaseModel):
     last_candle_age: float | None = None
     last_trade_age: float | None = None
     active_streams: int = 0
+    open_positions: int = 0
+    candle_stale: bool = False
 
 
 class TradingStatsSchema(BaseModel):

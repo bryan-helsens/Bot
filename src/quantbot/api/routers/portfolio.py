@@ -9,9 +9,11 @@ from fastapi import APIRouter
 
 from quantbot.api.dependencies import AuthDep, StateDep
 from quantbot.api.schemas import (
+    CoinDetailSchema,
     DailyPnlPoint,
     EquityPoint,
     PortfolioSchema,
+    TradeSchema,
     TradingStatsSchema,
 )
 
@@ -90,6 +92,46 @@ async def daily_pnl(state: StateDep, _: AuthDep, days: int = 30) -> list[DailyPn
         for day, pnls in sorted(buckets.items())
     ]
     return points[-days:]
+
+
+@router.get("/coin/{symbol}", response_model=CoinDetailSchema)
+async def coin_detail(symbol: str, state: StateDep, _: AuthDep) -> CoinDetailSchema:
+    """Everything the bot did with one coin: open position + trade history + stats."""
+    symbol = symbol.upper()
+    out = CoinDetailSchema(symbol=symbol)
+
+    pf = state.portfolio
+    if pf is not None:
+        pos = pf.positions.get(symbol)
+        if pos is not None and pos.is_open:
+            mark = pf.price_of(symbol) or pos.mark_price or pos.entry_price
+            out.has_position = True
+            out.side = pos.side.value
+            out.quantity = str(pos.quantity)
+            out.entry_price = str(pos.entry_price)
+            out.mark_price = str(mark)
+            out.value = str(pos.quantity * mark)
+            out.unrealized_pnl = str(pos.unrealized_pnl(mark))
+            out.stop_loss = str(pos.stop_loss) if pos.stop_loss is not None else None
+
+    trades = [t for t in (state.performance.trades if state.performance else []) if t.symbol == symbol]
+    if trades:
+        wins = sum(1 for t in trades if t.net_pnl > 0)
+        out.realized_pnl = str(sum((t.net_pnl for t in trades), Decimal("0")))
+        out.trade_count = len(trades)
+        out.win_rate = round(wins / len(trades), 4)
+        out.total_fees = str(sum((t.fees for t in trades), Decimal("0")))
+        out.trades = [
+            TradeSchema(
+                id=t.id, symbol=t.symbol, side=t.side.value, strategy=t.strategy,
+                quantity=str(t.quantity), entry_price=str(t.entry_price),
+                exit_price=str(t.exit_price), net_pnl=str(t.net_pnl),
+                return_pct=str(t.return_pct), exit_reason=t.exit_reason.value,
+                opened_at=t.opened_at, closed_at=t.closed_at,
+            )
+            for t in reversed(trades)
+        ]
+    return out
 
 
 @router.get("/allocation")

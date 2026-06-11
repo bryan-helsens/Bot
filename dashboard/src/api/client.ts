@@ -2,6 +2,7 @@
 // Vite dev proxy (and nginx in production) routes them to the FastAPI backend.
 
 import type {
+  CoinDetail,
   Config,
   DailyPnlPoint,
   EquityPoint,
@@ -54,6 +55,7 @@ export const api = {
   riskStatus: () => request<RiskStatus>("/risk/status"),
   stats: () => request<TradingStats>("/portfolio/stats"),
   config: () => request<Config>("/system/config"),
+  coinDetail: (symbol: string) => request<CoinDetail>(`/portfolio/coin/${symbol}`),
   closeAll: () =>
     request<{ detail: string; ok: boolean }>("/system/close-all", { method: "POST" }),
   pause: () =>

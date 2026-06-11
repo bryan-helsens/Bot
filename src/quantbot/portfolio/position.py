@@ -89,6 +89,7 @@ class PositionManager(LoggerMixin):
         self.log.info(
             "position_opened", symbol=symbol, side=position_side.value,
             qty=float(quantity), entry=float(entry_price),
+            value=float(quantity * entry_price),
         )
         return position
 
@@ -130,6 +131,7 @@ class PositionManager(LoggerMixin):
         if position is None or not position.is_open:
             return None
         trade = self._realise(position, position.quantity, exit_price, reason, fee, bars_held)
+        closed_qty = position.quantity
         position.status = PositionStatus.CLOSED
         position.exit_price = exit_price
         position.closed_at = utcnow()
@@ -137,7 +139,8 @@ class PositionManager(LoggerMixin):
         del self._positions[symbol]
         self.log.info(
             "position_closed", symbol=symbol, reason=reason.value,
-            exit=float(exit_price), net_pnl=float(trade.net_pnl),
+            qty=float(closed_qty), exit=float(exit_price),
+            value=float(closed_qty * exit_price), net_pnl=float(trade.net_pnl),
         )
         return trade
 

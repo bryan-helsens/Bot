@@ -4,6 +4,7 @@ import { ActivityFeed } from "./components/ActivityFeed";
 import { Allocation } from "./components/Allocation";
 import { Balances } from "./components/Balances";
 import { ClosedTrades } from "./components/ClosedTrades";
+import { CoinDetail } from "./components/CoinDetail";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { Controls } from "./components/Controls";
 import { DailyPnL } from "./components/DailyPnL";
@@ -21,11 +22,12 @@ import { usePolling } from "./hooks/usePolling";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { Portfolio, Position } from "./types";
 
-type Page = "overview" | "positions" | "performance" | "controls" | "logs";
+type Page = "overview" | "positions" | "coins" | "performance" | "controls" | "logs";
 
 const PAGES: { id: Page; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "positions", label: "Positions & Trades" },
+  { id: "coins", label: "Coin detail" },
   { id: "performance", label: "Performance" },
   { id: "controls", label: "Controls & Config" },
   { id: "logs", label: "Logs" },
@@ -91,6 +93,14 @@ export function App() {
           <div className="col-12"><OpenPositions positions={pos} /></div>
           <div className="col-6"><ActivityFeed /></div>
           <div className="col-6"><ClosedTrades /></div>
+        </div>
+      )}
+
+      {page === "coins" && (
+        <div className="grid">
+          <div className="col-12"><CoinDetail /></div>
+          <div className="col-6"><ActivityFeed /></div>
+          <div className="col-6"><Allocation /></div>
         </div>
       )}
 
