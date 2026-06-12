@@ -230,6 +230,78 @@ async def analytics(state: StateDep, _: AuthDep) -> AnalyticsSchema:
     )
 
 
+@router.get("/report")
+async def report(state: StateDep, _: AuthDep, days: int = 7) -> dict:
+    """Honest performance report: realised results vs a buy & hold BTC benchmark.
+
+    The point is a go/no-go evidence base, not a vanity number — so it surfaces
+    fees as a share of gross profit and a plain verdict on whether the bot beat
+    simply holding BTC over the same window.
+    """
+    trades_all = trade_history(state)
+    now = datetime.now(UTC)
+    since = now - timedelta(days=days)
+
+    def _closed(t):
+        ts = t.closed_at
+        return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+
+    trades = [t for t in trades_all if _closed(t) >= since]
+    pnls = [t.net_pnl for t in trades]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    gross_profit = sum(wins, Decimal("0"))
+    gross_loss = abs(sum(losses, Decimal("0")))
+    net = sum(pnls, Decimal("0"))
+    fees = sum((t.fees for t in trades), Decimal("0"))
+    holds = [
+        (_closed(t) - (t.opened_at if t.opened_at.tzinfo else t.opened_at.replace(tzinfo=UTC))).total_seconds()
+        for t in trades
+    ]
+
+    pf = state.portfolio
+    start_equity = float(pf._starting_balance) if pf is not None else 0.0  # noqa: SLF001
+    bot_return_pct = (float(net) / start_equity * 100) if start_equity > 0 else 0.0
+
+    # Buy & hold BTC benchmark over the data window we actually have.
+    benchmark_pct: float | None = None
+    engine = state.trading_engine
+    if engine is not None and hasattr(engine, "coin_market_snapshot"):
+        snap = engine.coin_market_snapshot("BTCUSDT")
+        prices = snap.get("prices", [])
+        if len(prices) >= 2 and prices[0]:
+            benchmark_pct = round((prices[-1] - prices[0]) / prices[0] * 100, 2)
+
+    beat = None if benchmark_pct is None else bot_return_pct > benchmark_pct
+    if not trades:
+        verdict = "No closed trades in this window yet — keep gathering data."
+    elif net > 0 and (beat is None or beat):
+        verdict = "Net positive after fees" + ("" if beat is None else " and beating BTC buy & hold.")
+    elif net > 0:
+        verdict = "Net positive, but a simple BTC hold did better over this window."
+    else:
+        verdict = "Net negative after fees — no edge demonstrated yet. Do NOT risk real money."
+
+    return {
+        "days": days,
+        "quote_asset": state.settings.quote_asset,
+        "trades": len(trades),
+        "net_pnl": str(net),
+        "gross_profit": str(gross_profit),
+        "gross_loss": str(-gross_loss),
+        "fees": str(fees),
+        "fees_pct_of_gross": round(float(fees / gross_profit * 100), 1) if gross_profit > 0 else None,
+        "win_rate": round(len(wins) / len(trades), 4) if trades else 0.0,
+        "profit_factor": round(float(gross_profit / gross_loss), 3) if gross_loss > 0 else 0.0,
+        "expectancy": str(net / len(trades)) if trades else "0",
+        "avg_hold_seconds": round(sum(holds) / len(holds), 1) if holds else 0.0,
+        "bot_return_pct": round(bot_return_pct, 2),
+        "benchmark_pct": benchmark_pct,
+        "beats_benchmark": beat,
+        "verdict": verdict,
+    }
+
+
 @router.get("/allocation")
 async def allocation(state: StateDep, _: AuthDep) -> dict[str, float]:
     """Return per-symbol allocation as fractions of equity."""

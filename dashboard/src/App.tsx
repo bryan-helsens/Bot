@@ -12,13 +12,17 @@ import { DailyPnL } from "./components/DailyPnL";
 import { DrawdownChart } from "./components/DrawdownChart";
 import { EquityCurve } from "./components/EquityCurve";
 import { Health } from "./components/Health";
+import { Login } from "./components/Login";
 import { LogPanel } from "./components/LogPanel";
 import { ManualTrade } from "./components/ManualTrade";
 import { MarketScanner } from "./components/MarketScanner";
 import { OpenPositions } from "./components/OpenPositions";
 import { PnLPanel } from "./components/PnLPanel";
+import { ProfitReport } from "./components/ProfitReport";
 import { RiskStats } from "./components/RiskStats";
+import { RiskTuner } from "./components/RiskTuner";
 import { StrategyPerformance } from "./components/StrategyPerformance";
+import { StrategyTuner } from "./components/StrategyTuner";
 import { SystemStatus } from "./components/SystemStatus";
 import { TradeAnalytics } from "./components/TradeAnalytics";
 import { usePolling } from "./hooks/usePolling";
@@ -49,6 +53,27 @@ const PAGES: { id: Page; label: string }[] = [
 ];
 
 export function App() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const onRequired = () => setAuthed(false);
+    window.addEventListener("qb-auth-required", onRequired);
+    api
+      .authStatus()
+      .then(({ required }) => {
+        if (!required) setAuthed(true);
+        else setAuthed(Boolean(localStorage.getItem("qb_token")));
+      })
+      .catch(() => setAuthed(true)); // status unreachable -> don't lock the user out
+    return () => window.removeEventListener("qb-auth-required", onRequired);
+  }, []);
+
+  if (authed === null) return <div className="app" />;
+  if (authed === false) return <Login onSuccess={() => setAuthed(true)} />;
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const { lastMessage, connected } = useWebSocket();
   const [page, setPage] = useState<Page>("overview");
   const { data: portfolio, refresh: refreshPortfolio } = usePolling<Portfolio>(
@@ -139,6 +164,7 @@ export function App() {
 
       {page === "performance" && (
         <div className="grid">
+          <div className="col-12"><ProfitReport /></div>
           <div className="col-12"><EquityCurve /></div>
           <div className="col-7"><DailyPnL /></div>
           <div className="col-5"><Health /></div>
@@ -152,6 +178,8 @@ export function App() {
           <div className="col-6"><Controls /></div>
           <div className="col-6"><ManualTrade /></div>
           <div className="col-6"><RiskStats /></div>
+          <div className="col-6"><RiskTuner /></div>
+          <div className="col-12"><StrategyTuner /></div>
           <div className="col-6"><ConfigPanel /></div>
         </div>
       )}

@@ -114,6 +114,39 @@ class BaseStrategy(abc.ABC):
         """Read a parameter value."""
         return self.params.get(key, default)
 
+    def update_params(self, new_params: dict[str, Any]) -> dict[str, Any]:
+        """Live-update parameters, validated and coerced to each param's type.
+
+        Unknown keys are rejected. Each value is coerced to the type of the matching
+        ``default_params`` entry (so a string "40" from the dashboard becomes the
+        right int/float). Returns the new full params dict. The change takes effect
+        on the next candle — it does NOT touch persisted config files.
+        """
+        unknown = set(new_params) - set(self.default_params)
+        if unknown and self.default_params:
+            raise StrategyConfigError(
+                f"Unknown parameters for {self.name}: {sorted(unknown)}",
+                context={"unknown": sorted(unknown), "valid": sorted(self.default_params)},
+            )
+        for key, value in new_params.items():
+            template = self.default_params.get(key)
+            try:
+                if isinstance(template, bool):
+                    coerced: Any = value if isinstance(value, bool) else str(value).lower() in ("1", "true", "yes")
+                elif isinstance(template, int) and not isinstance(template, bool):
+                    coerced = int(float(value))
+                elif isinstance(template, float):
+                    coerced = float(value)
+                else:
+                    coerced = value
+            except (TypeError, ValueError) as exc:
+                raise StrategyConfigError(
+                    f"Invalid value for {key!r}: {value!r}", context={"param": key}
+                ) from exc
+            self.params[key] = coerced
+        self._log.info("strategy_params_updated", **{k: self.params[k] for k in new_params})
+        return self.params
+
     # ------------------------------------------------------------------ state
 
     @property

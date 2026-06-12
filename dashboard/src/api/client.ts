@@ -12,8 +12,10 @@ import type {
   LogEntry,
   Portfolio,
   Position,
+  Report,
   RiskStatus,
   ScannerRow,
+  StrategyInfo,
   StrategyPerformance,
   SystemStatus,
   Trade,
@@ -39,6 +41,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const response = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!response.ok) {
+    if (response.status === 401) {
+      // Token missing/expired — tell the app to show the login screen.
+      setToken(null);
+      window.dispatchEvent(new CustomEvent("qb-auth-required"));
+    }
     const text = await response.text().catch(() => response.statusText);
     throw new Error(`API ${response.status}: ${text}`);
   }
@@ -89,6 +96,19 @@ export const api = {
   scanner: () => request<ScannerRow[]>("/market/scanner"),
   analytics: () => request<Analytics>("/portfolio/analytics"),
   account: () => request<Account>("/account/balances"),
+  report: (days = 7) => request<Report>(`/portfolio/report?days=${days}`),
+  strategies: () => request<StrategyInfo[]>("/strategies"),
+  updateStrategyParams: (name: string, params: Record<string, string | number | boolean>) =>
+    request<{ detail: string; ok: boolean }>(`/strategies/${name}/params`, {
+      method: "POST",
+      body: JSON.stringify({ params }),
+    }),
+  riskParams: (body: Record<string, string | number>) =>
+    request<{ detail: string; ok: boolean }>("/system/risk-params", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  authStatus: () => request<{ required: boolean }>("/auth/status"),
   muted: () => request<string[]>("/system/muted"),
   mute: (symbol: string) =>
     request<{ detail: string; ok: boolean }>(`/system/symbol/${symbol}/mute`, { method: "POST" }),

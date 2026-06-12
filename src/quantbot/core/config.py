@@ -254,6 +254,11 @@ class ApiSettings(BaseModel):
     jwt_secret: SecretStr = SecretStr("change_me")
     jwt_expire_minutes: Annotated[int, Field(gt=0)] = 1440
     cors_origins: CsvStrList = Field(default_factory=lambda: ["http://localhost:5173"])
+    # Dashboard login. When a password is set, the API requires authentication even
+    # in development — set this (plus a real JWT secret) before exposing the
+    # dashboard beyond an SSH tunnel or going to real money.
+    dashboard_user: str = "admin"
+    dashboard_password: SecretStr = SecretStr("")
 
 
 class SecuritySettings(BaseModel):

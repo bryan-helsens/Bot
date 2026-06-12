@@ -206,6 +206,34 @@ export interface Analytics {
   by_exit_reason: Record<string, number>;
 }
 
+export interface Report {
+  days: number;
+  quote_asset: string;
+  trades: number;
+  net_pnl: string;
+  gross_profit: string;
+  gross_loss: string;
+  fees: string;
+  fees_pct_of_gross: number | null;
+  win_rate: number;
+  profit_factor: number;
+  expectancy: string;
+  avg_hold_seconds: number;
+  bot_return_pct: number;
+  benchmark_pct: number | null;
+  beats_benchmark: boolean | null;
+  verdict: string;
+}
+
+export interface StrategyInfo {
+  name: string;
+  class: string;
+  symbols: string[];
+  timeframes: string[];
+  params: Record<string, number | string | boolean>;
+  default_params: Record<string, number | string | boolean>;
+}
+
 export interface AssetBalance {
   asset: string;
   free: number;

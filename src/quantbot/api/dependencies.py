@@ -98,13 +98,26 @@ def verify_token(token: str, settings: Settings) -> str:
     return str(subject)
 
 
+def auth_required(settings: Settings) -> bool:
+    """Whether the API enforces authentication.
+
+    Auth is ON when running in production, when a real JWT secret is set, or when a
+    dashboard password is configured. Left fully default (dev + ``change_me`` secret +
+    no password) it stays OFF so the local SSH-tunnel testnet workflow is friction-free.
+    """
+    return bool(
+        settings.is_production
+        or settings.api.jwt_secret.get_secret_value() != "change_me"
+        or settings.api.dashboard_password.get_secret_value()
+    )
+
+
 async def require_auth(
     token: Annotated[str | None, Depends(_oauth2_scheme)],
     state: Annotated[AppState, Depends(get_state)],
 ) -> str:
     """FastAPI dependency enforcing a valid bearer token; returns the subject."""
-    # Auth can be disabled in development by leaving the default JWT secret.
-    if not state.settings.is_production and state.settings.api.jwt_secret.get_secret_value() == "change_me":
+    if not auth_required(state.settings):
         return "dev"
     if token is None:
         raise HTTPException(
@@ -123,6 +136,7 @@ __all__ = [
     "AppState",
     "AuthDep",
     "StateDep",
+    "auth_required",
     "create_access_token",
     "get_state",
     "require_auth",

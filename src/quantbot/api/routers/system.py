@@ -45,14 +45,27 @@ async def health(state: StateDep) -> HealthResponse:
     )
 
 
+@router.get("/auth/status", tags=["system"])
+async def auth_status(state: StateDep) -> dict:
+    """Whether the API requires login (so the dashboard can show a login screen)."""
+    from quantbot.api.dependencies import auth_required
+
+    return {"required": auth_required(state.settings)}
+
+
 @router.post("/auth/login", response_model=TokenResponse, tags=["system"])
 async def login(request: LoginRequest, state: StateDep) -> TokenResponse:
-    """Issue a JWT. Credentials are validated against configured API auth."""
-    # A single operator account is supported via env; extend as needed.
-    expected_user = "admin"
-    if request.username != expected_user:
-        from fastapi import HTTPException, status
+    """Issue a JWT after validating the configured dashboard user + password."""
+    import hmac
 
+    from fastapi import HTTPException, status
+
+    api = state.settings.api
+    expected_pw = api.dashboard_password.get_secret_value()
+    # Constant-time comparison to avoid leaking validity via timing.
+    user_ok = hmac.compare_digest(request.username, api.dashboard_user)
+    pw_ok = hmac.compare_digest(request.password, expected_pw) if expected_pw else True
+    if not (user_ok and pw_ok):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token, expires = create_access_token(request.username, state.settings)
     return TokenResponse(access_token=token, expires_in=expires)
@@ -226,6 +239,43 @@ async def muted_symbols(state: StateDep, _: AuthDep) -> list[str]:
     if engine is None or not hasattr(engine, "muted_symbols"):
         return []
     return engine.muted_symbols()
+
+
+@router.post("/system/risk-params", response_model=MessageResponse, tags=["system"])
+async def update_risk_params(req: dict, state: StateDep, _: AuthDep) -> MessageResponse:
+    """Live-tune core risk knobs (risk per trade, stop-loss, max open). Not persisted.
+
+    Mutates the shared RiskSettings the position sizer reads on every order, so the
+    change takes effect on the next entry — no restart needed.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    r = state.settings.risk
+    changed: list[str] = []
+    bounds = {
+        "risk_per_trade": (Decimal("0"), Decimal("0.1")),
+        "default_stop_loss_pct": (Decimal("0.001"), Decimal("0.5")),
+    }
+    try:
+        for key in ("risk_per_trade", "default_stop_loss_pct"):
+            if key in req and req[key] is not None:
+                val = Decimal(str(req[key]))
+                lo, hi = bounds[key]
+                if not (lo < val <= hi):
+                    return MessageResponse(detail=f"{key} must be in ({lo}, {hi}]", ok=False)
+                setattr(r, key, val)
+                changed.append(f"{key}={val}")
+        if "max_open_trades" in req and req["max_open_trades"] is not None:
+            n = int(req["max_open_trades"])
+            if not (1 <= n <= 50):
+                return MessageResponse(detail="max_open_trades must be 1-50", ok=False)
+            r.max_open_trades = n
+            changed.append(f"max_open_trades={n}")
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        return MessageResponse(detail=f"Invalid value: {exc}", ok=False)
+    if not changed:
+        return MessageResponse(detail="No recognised risk parameters supplied", ok=False)
+    return MessageResponse(detail="Updated " + ", ".join(changed))
 
 
 @router.get("/system/config", response_model=ConfigSchema, tags=["system"])
