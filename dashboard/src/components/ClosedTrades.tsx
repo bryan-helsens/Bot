@@ -1,11 +1,7 @@
 import { api } from "../api/client";
+import { cls, clock, pct, price, signedMoney } from "../format";
 import { usePolling } from "../hooks/usePolling";
 import type { Trade } from "../types";
-
-function cls(value: string): string {
-  const n = parseFloat(value);
-  return n > 0 ? "pos" : n < 0 ? "neg" : "";
-}
 
 export function ClosedTrades() {
   const { data, error } = usePolling<Trade[]>(() => api.trades(50), 10000);
@@ -28,6 +24,7 @@ export function ClosedTrades() {
               <th>Net PnL</th>
               <th>Return</th>
               <th>Reason</th>
+              <th>Closed</th>
             </tr>
           </thead>
           <tbody>
@@ -35,13 +32,12 @@ export function ClosedTrades() {
               <tr key={t.id}>
                 <td>{t.symbol}</td>
                 <td className={t.side === "long" ? "pos" : "neg"}>{t.side}</td>
-                <td>{parseFloat(t.entry_price).toFixed(2)}</td>
-                <td>{parseFloat(t.exit_price).toFixed(2)}</td>
-                <td className={cls(t.net_pnl)}>{parseFloat(t.net_pnl).toFixed(2)}</td>
-                <td className={cls(t.return_pct)}>
-                  {(parseFloat(t.return_pct) * 100).toFixed(2)}%
-                </td>
+                <td>{price(t.entry_price)}</td>
+                <td>{price(t.exit_price)}</td>
+                <td className={cls(t.net_pnl)}>{signedMoney(t.net_pnl)}</td>
+                <td className={cls(t.return_pct)}>{pct(t.return_pct)}</td>
                 <td>{t.exit_reason}</td>
+                <td className="muted">{clock(t.closed_at)}</td>
               </tr>
             ))}
           </tbody>

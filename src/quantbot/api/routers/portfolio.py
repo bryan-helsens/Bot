@@ -9,6 +9,8 @@ from fastapi import APIRouter
 
 from quantbot.api.dependencies import AuthDep, StateDep, trade_history
 from quantbot.api.schemas import (
+    AnalyticsSchema,
+    CoinAnalytics,
     CoinDetailSchema,
     DailyPnlPoint,
     EquityPoint,
@@ -141,6 +143,91 @@ async def coin_detail(symbol: str, state: StateDep, _: AuthDep) -> CoinDetailSch
             for t in reversed(trades)
         ]
     return out
+
+
+def _hold_seconds(t) -> float:
+    """Seconds a trade was held (opened_at → closed_at), tz-safe."""
+    o, c = t.opened_at, t.closed_at
+    if o.tzinfo is None:
+        o = o.replace(tzinfo=UTC)
+    if c.tzinfo is None:
+        c = c.replace(tzinfo=UTC)
+    return max(0.0, (c - o).total_seconds())
+
+
+def _breakdown(name: str, trades: list) -> CoinAnalytics:
+    """Aggregate a list of closed trades into a performance breakdown."""
+    pnls = [t.net_pnl for t in trades]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    gross_profit = sum(wins, Decimal("0"))
+    gross_loss = abs(sum(losses, Decimal("0")))
+    holds = [_hold_seconds(t) for t in trades]
+    return CoinAnalytics(
+        name=name,
+        trades=len(trades),
+        net_pnl=str(sum(pnls, Decimal("0"))),
+        win_rate=round(len(wins) / len(trades), 4) if trades else 0.0,
+        wins=len(wins),
+        losses=len(losses),
+        avg_win=str(gross_profit / len(wins)) if wins else "0",
+        avg_loss=str(-gross_loss / len(losses)) if losses else "0",
+        profit_factor=round(float(gross_profit / gross_loss), 3) if gross_loss > 0 else 0.0,
+        total_fees=str(sum((t.fees for t in trades), Decimal("0"))),
+        avg_hold_seconds=round(sum(holds) / len(holds), 1) if holds else 0.0,
+        best=str(max(pnls)) if pnls else "0",
+        worst=str(min(pnls)) if pnls else "0",
+    )
+
+
+@router.get("/analytics", response_model=AnalyticsSchema)
+async def analytics(state: StateDep, _: AuthDep) -> AnalyticsSchema:
+    """Deep realised-performance breakdown: overall + per coin + per strategy."""
+    trades = trade_history(state)
+    quote = state.settings.quote_asset
+    if not trades:
+        return AnalyticsSchema(quote_asset=quote)
+
+    pnls = [t.net_pnl for t in trades]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    gross_profit = sum(wins, Decimal("0"))
+    gross_loss = abs(sum(losses, Decimal("0")))
+    net = sum(pnls, Decimal("0"))
+    holds = [_hold_seconds(t) for t in trades]
+
+    by_coin: dict[str, list] = {}
+    by_strategy: dict[str, list] = {}
+    by_exit: dict[str, int] = {}
+    for t in trades:
+        by_coin.setdefault(t.symbol, []).append(t)
+        by_strategy.setdefault(t.strategy or "manual", []).append(t)
+        reason = t.exit_reason.value if hasattr(t.exit_reason, "value") else str(t.exit_reason)
+        by_exit[reason] = by_exit.get(reason, 0) + 1
+
+    coin_rows = sorted(
+        (_breakdown(s, ts) for s, ts in by_coin.items()),
+        key=lambda r: float(r.net_pnl), reverse=True,
+    )
+    strat_rows = sorted(
+        (_breakdown(s, ts) for s, ts in by_strategy.items()),
+        key=lambda r: float(r.net_pnl), reverse=True,
+    )
+    return AnalyticsSchema(
+        quote_asset=quote,
+        total_trades=len(trades),
+        net_pnl=str(net),
+        gross_profit=str(gross_profit),
+        gross_loss=str(-gross_loss),
+        win_rate=round(len(wins) / len(trades), 4),
+        profit_factor=round(float(gross_profit / gross_loss), 3) if gross_loss > 0 else 0.0,
+        expectancy=str(net / len(trades)),
+        avg_hold_seconds=round(sum(holds) / len(holds), 1) if holds else 0.0,
+        total_fees=str(sum((t.fees for t in trades), Decimal("0"))),
+        by_coin=coin_rows,
+        by_strategy=strat_rows,
+        by_exit_reason=by_exit,
+    )
 
 
 @router.get("/allocation")

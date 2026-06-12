@@ -12,7 +12,16 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from quantbot.api.dependencies import AppState, set_state
-from quantbot.api.routers import portfolio, positions, risk, strategies, system, trades
+from quantbot.api.routers import (
+    account,
+    market,
+    portfolio,
+    positions,
+    risk,
+    strategies,
+    system,
+    trades,
+)
 from quantbot.api.websocket import ConnectionManager, EventBroadcaster
 from quantbot import __version__
 from quantbot.core.config import Settings, get_settings
@@ -53,7 +62,7 @@ def create_app(
     # REST routers — registered at the root AND under /api. The dashboard calls
     # "/api/..."; in dev the Vite proxy strips /api to the root, while in production
     # (FastAPI serving the built dashboard itself) the /api routes are used directly.
-    for module in (system, portfolio, positions, trades, strategies, risk):
+    for module in (system, portfolio, positions, trades, strategies, risk, market, account):
         app.include_router(module.router)
         app.include_router(module.router, prefix="/api")
 

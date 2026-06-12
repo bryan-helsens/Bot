@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { cls, pct, signedMoney } from "../format";
 import { usePolling } from "../hooks/usePolling";
 import type { RiskStatus } from "../types";
-
-function cls(value: string): string {
-  const n = parseFloat(value);
-  return n > 0 ? "pos" : n < 0 ? "neg" : "";
-}
 
 export function RiskStats() {
   const { data, error, refresh } = usePolling<RiskStatus>(() => api.riskStatus(), 5000);
@@ -46,15 +42,15 @@ export function RiskStats() {
               </tr>
               <tr>
                 <th>Daily PnL</th>
-                <td className={cls(data.daily_pnl)}>{parseFloat(data.daily_pnl).toFixed(2)}</td>
+                <td className={cls(data.daily_pnl)}>{signedMoney(data.daily_pnl)}</td>
               </tr>
               <tr>
                 <th>Weekly PnL</th>
-                <td className={cls(data.weekly_pnl)}>{parseFloat(data.weekly_pnl).toFixed(2)}</td>
+                <td className={cls(data.weekly_pnl)}>{signedMoney(data.weekly_pnl)}</td>
               </tr>
               <tr>
                 <th>Drawdown</th>
-                <td className="neg">{(parseFloat(data.current_drawdown) * 100).toFixed(2)}%</td>
+                <td className="neg">{pct(data.current_drawdown)}</td>
               </tr>
               <tr>
                 <th>Open Trades</th>

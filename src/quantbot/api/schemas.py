@@ -238,8 +238,93 @@ class ActionRequest(BaseModel):
     reason: str = Field(default="manual", max_length=200)
 
 
+class ScannerRow(BaseModel):
+    """One coin's live indicator snapshot for the market scanner."""
+
+    symbol: str
+    price: float
+    rsi: float | None = None
+    ema_fast: float | None = None
+    ema_slow: float | None = None
+    trend: str | None = None
+    ema_gap_pct: float | None = None
+    signal: str = "neutral"
+    timeframe: str | None = None
+    has_position: bool = False
+    muted: bool = False
+
+
+class CoinAnalytics(BaseModel):
+    """Per-coin or per-strategy realised-performance breakdown (amounts in quote)."""
+
+    name: str
+    trades: int = 0
+    net_pnl: str = "0"
+    win_rate: float = 0.0
+    wins: int = 0
+    losses: int = 0
+    avg_win: str = "0"
+    avg_loss: str = "0"
+    profit_factor: float = 0.0
+    total_fees: str = "0"
+    avg_hold_seconds: float = 0.0
+    best: str = "0"
+    worst: str = "0"
+
+
+class AnalyticsSchema(BaseModel):
+    """Full trade-analytics payload: overall totals + per-coin + per-strategy."""
+
+    quote_asset: str = "USDT"
+    total_trades: int = 0
+    net_pnl: str = "0"
+    gross_profit: str = "0"
+    gross_loss: str = "0"
+    win_rate: float = 0.0
+    profit_factor: float = 0.0
+    expectancy: str = "0"
+    avg_hold_seconds: float = 0.0
+    total_fees: str = "0"
+    by_coin: list[CoinAnalytics] = Field(default_factory=list)
+    by_strategy: list[CoinAnalytics] = Field(default_factory=list)
+    by_exit_reason: dict[str, int] = Field(default_factory=dict)
+
+
+class AssetBalance(BaseModel):
+    """A single asset's exchange balance."""
+
+    asset: str
+    free: float = 0.0
+    locked: float = 0.0
+    total: float = 0.0
+
+
+class CapitalEntry(BaseModel):
+    """A recorded deposit/withdrawal (NOT profit)."""
+
+    ts: str | None = None
+    amount: float = 0.0
+    equity_after: float | None = None
+
+
+class AccountSchema(BaseModel):
+    """Account overview: exchange wallet vs bot equity + per-asset balances."""
+
+    quote_asset: str = "USDT"
+    wallet_equity: float | None = None
+    bot_equity: float = 0.0
+    bot_cash: float = 0.0
+    assets: list[AssetBalance] = Field(default_factory=list)
+    capital_history: list[CapitalEntry] = Field(default_factory=list)
+
+
 __all__ = [
+    "AccountSchema",
     "ActionRequest",
+    "AnalyticsSchema",
+    "AssetBalance",
+    "CapitalEntry",
+    "CoinAnalytics",
     "EquityPoint",
     "HealthResponse",
     "LoginRequest",
@@ -248,6 +333,7 @@ __all__ = [
     "PositionSchema",
     "RiskEventSchema",
     "RiskStatusSchema",
+    "ScannerRow",
     "StrategyPerformanceSchema",
     "SystemStatusSchema",
     "TokenResponse",

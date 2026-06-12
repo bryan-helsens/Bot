@@ -199,6 +199,35 @@ async def adjust_capital(req: CapitalRequest, state: StateDep, _: AuthDep) -> Me
     return MessageResponse(detail=result["detail"], ok=bool(result["ok"]))
 
 
+@router.post("/system/symbol/{symbol}/mute", response_model=MessageResponse, tags=["system"])
+async def mute_symbol(symbol: str, state: StateDep, _: AuthDep) -> MessageResponse:
+    """Stop the bot opening NEW automated positions on a coin (manual still works)."""
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "mute_symbol"):
+        return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
+    result = engine.mute_symbol(symbol)
+    return MessageResponse(detail=result["detail"], ok=bool(result["ok"]))
+
+
+@router.post("/system/symbol/{symbol}/unmute", response_model=MessageResponse, tags=["system"])
+async def unmute_symbol(symbol: str, state: StateDep, _: AuthDep) -> MessageResponse:
+    """Re-enable automated entries on a coin."""
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "unmute_symbol"):
+        return MessageResponse(detail="Needs the live engine (quantbot serve).", ok=False)
+    result = engine.unmute_symbol(symbol)
+    return MessageResponse(detail=result["detail"], ok=bool(result["ok"]))
+
+
+@router.get("/system/muted", response_model=list[str], tags=["system"])
+async def muted_symbols(state: StateDep, _: AuthDep) -> list[str]:
+    """Symbols currently muted (excluded from automated entries)."""
+    engine = state.trading_engine
+    if engine is None or not hasattr(engine, "muted_symbols"):
+        return []
+    return engine.muted_symbols()
+
+
 @router.get("/system/config", response_model=ConfigSchema, tags=["system"])
 async def system_config(state: StateDep, _: AuthDep) -> ConfigSchema:
     """Read-only view of the active risk/universe configuration."""

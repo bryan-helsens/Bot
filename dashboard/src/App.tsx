@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api/client";
+import { AccountPage } from "./components/AccountPage";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { Allocation } from "./components/Allocation";
 import { Balances } from "./components/Balances";
@@ -13,22 +14,36 @@ import { EquityCurve } from "./components/EquityCurve";
 import { Health } from "./components/Health";
 import { LogPanel } from "./components/LogPanel";
 import { ManualTrade } from "./components/ManualTrade";
+import { MarketScanner } from "./components/MarketScanner";
 import { OpenPositions } from "./components/OpenPositions";
 import { PnLPanel } from "./components/PnLPanel";
 import { RiskStats } from "./components/RiskStats";
 import { StrategyPerformance } from "./components/StrategyPerformance";
 import { SystemStatus } from "./components/SystemStatus";
+import { TradeAnalytics } from "./components/TradeAnalytics";
 import { usePolling } from "./hooks/usePolling";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { Portfolio, Position } from "./types";
 
-type Page = "overview" | "positions" | "coins" | "performance" | "controls" | "logs";
+type Page =
+  | "overview"
+  | "market"
+  | "positions"
+  | "coins"
+  | "analytics"
+  | "performance"
+  | "account"
+  | "controls"
+  | "logs";
 
 const PAGES: { id: Page; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "market", label: "Market Scanner" },
   { id: "positions", label: "Positions & Trades" },
   { id: "coins", label: "Coin detail" },
+  { id: "analytics", label: "Trade Analytics" },
   { id: "performance", label: "Performance" },
+  { id: "account", label: "Account" },
   { id: "controls", label: "Controls & Config" },
   { id: "logs", label: "Logs" },
 ];
@@ -83,6 +98,24 @@ export function App() {
           <div className="col-4"><Health /></div>
           <div className="col-8"><EquityCurve /></div>
           <div className="col-12"><DrawdownChart /></div>
+        </div>
+      )}
+
+      {page === "market" && (
+        <div className="grid">
+          <div className="col-12"><MarketScanner /></div>
+        </div>
+      )}
+
+      {page === "analytics" && (
+        <div className="grid">
+          <div className="col-12"><TradeAnalytics /></div>
+        </div>
+      )}
+
+      {page === "account" && (
+        <div className="grid">
+          <div className="col-12"><AccountPage /></div>
         </div>
       )}
 

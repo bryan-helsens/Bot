@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { cls, money, price, signedMoney } from "../format";
 import type { Position } from "../types";
-
-function cls(value: string): string {
-  const n = parseFloat(value);
-  return n > 0 ? "pos" : n < 0 ? "neg" : "";
-}
 
 export function OpenPositions({ positions }: { positions: Position[] }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -35,6 +31,7 @@ export function OpenPositions({ positions }: { positions: Position[] }) {
               <th>Qty</th>
               <th>Entry</th>
               <th>Mark</th>
+              <th>Value</th>
               <th>uPnL</th>
               <th>Stop</th>
               <th></th>
@@ -46,12 +43,15 @@ export function OpenPositions({ positions }: { positions: Position[] }) {
                 <td>{p.symbol}</td>
                 <td className={p.side === "long" ? "pos" : "neg"}>{p.side}</td>
                 <td>{parseFloat(p.quantity).toFixed(4)}</td>
-                <td>{parseFloat(p.entry_price).toFixed(2)}</td>
-                <td>{p.mark_price ? parseFloat(p.mark_price).toFixed(2) : "—"}</td>
-                <td className={cls(p.unrealized_pnl)}>
-                  {parseFloat(p.unrealized_pnl).toFixed(2)}
+                <td>{price(p.entry_price)}</td>
+                <td>{p.mark_price ? price(p.mark_price) : "—"}</td>
+                <td>
+                  {p.mark_price
+                    ? money(parseFloat(p.quantity) * parseFloat(p.mark_price))
+                    : "—"}
                 </td>
-                <td>{p.stop_loss ? parseFloat(p.stop_loss).toFixed(2) : "—"}</td>
+                <td className={cls(p.unrealized_pnl)}>{signedMoney(p.unrealized_pnl)}</td>
+                <td>{p.stop_loss ? price(p.stop_loss) : "—"}</td>
                 <td>
                   <button
                     className="btn-sell btn-sm"

@@ -1,13 +1,5 @@
+import { cls, money, pct, signedMoney } from "../format";
 import type { Portfolio } from "../types";
-
-function pct(value: string): string {
-  return `${(parseFloat(value) * 100).toFixed(2)}%`;
-}
-
-function cls(value: string): string {
-  const n = parseFloat(value);
-  return n > 0 ? "pos" : n < 0 ? "neg" : "";
-}
 
 export function PnLPanel({ portfolio }: { portfolio: Portfolio | null }) {
   if (!portfolio) {
@@ -19,7 +11,8 @@ export function PnLPanel({ portfolio }: { portfolio: Portfolio | null }) {
     );
   }
   const cards: { label: string; value: string; cls?: string }[] = [
-    { label: "Equity", value: parseFloat(portfolio.equity).toFixed(2) },
+    { label: "Equity", value: money(portfolio.equity) },
+    { label: "Cash (free)", value: money(portfolio.cash) },
     {
       label: "Total Return",
       value: pct(portfolio.total_return_pct),
@@ -27,15 +20,15 @@ export function PnLPanel({ portfolio }: { portfolio: Portfolio | null }) {
     },
     {
       label: "Unrealized PnL",
-      value: parseFloat(portfolio.unrealized_pnl).toFixed(2),
+      value: signedMoney(portfolio.unrealized_pnl),
       cls: cls(portfolio.unrealized_pnl),
     },
     {
       label: "Realized PnL",
-      value: parseFloat(portfolio.realized_pnl).toFixed(2),
+      value: signedMoney(portfolio.realized_pnl),
       cls: cls(portfolio.realized_pnl),
     },
-    { label: "Exposure", value: pct(portfolio.exposure_pct) },
+    { label: "Exposure", value: `${money(portfolio.exposure)} (${pct(portfolio.exposure_pct)})` },
     { label: "Max Drawdown", value: pct(portfolio.max_drawdown), cls: "neg" },
   ];
 

@@ -2,6 +2,8 @@
 // Vite dev proxy (and nginx in production) routes them to the FastAPI backend.
 
 import type {
+  Account,
+  Analytics,
   CoinDetail,
   Config,
   DailyPnlPoint,
@@ -11,6 +13,7 @@ import type {
   Portfolio,
   Position,
   RiskStatus,
+  ScannerRow,
   StrategyPerformance,
   SystemStatus,
   Trade,
@@ -82,6 +85,16 @@ export const api = {
     request<{ detail: string; ok: boolean }>("/system/test-order", {
       method: "POST",
       body: JSON.stringify({ symbol, side }),
+    }),
+  scanner: () => request<ScannerRow[]>("/market/scanner"),
+  analytics: () => request<Analytics>("/portfolio/analytics"),
+  account: () => request<Account>("/account/balances"),
+  muted: () => request<string[]>("/system/muted"),
+  mute: (symbol: string) =>
+    request<{ detail: string; ok: boolean }>(`/system/symbol/${symbol}/mute`, { method: "POST" }),
+  unmute: (symbol: string) =>
+    request<{ detail: string; ok: boolean }>(`/system/symbol/${symbol}/unmute`, {
+      method: "POST",
     }),
   login: (username: string, password: string) =>
     request<{ access_token: string; token_type: string; expires_in: number }>(

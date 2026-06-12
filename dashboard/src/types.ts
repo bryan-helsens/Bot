@@ -159,3 +159,71 @@ export interface DailyPnlPoint {
   pnl: number;
   trades: number;
 }
+
+export interface ScannerRow {
+  symbol: string;
+  price: number;
+  rsi: number | null;
+  ema_fast: number | null;
+  ema_slow: number | null;
+  trend: string | null;
+  ema_gap_pct: number | null;
+  signal: string;
+  timeframe: string | null;
+  has_position: boolean;
+  muted: boolean;
+}
+
+export interface CoinAnalytics {
+  name: string;
+  trades: number;
+  net_pnl: string;
+  win_rate: number;
+  wins: number;
+  losses: number;
+  avg_win: string;
+  avg_loss: string;
+  profit_factor: number;
+  total_fees: string;
+  avg_hold_seconds: number;
+  best: string;
+  worst: string;
+}
+
+export interface Analytics {
+  quote_asset: string;
+  total_trades: number;
+  net_pnl: string;
+  gross_profit: string;
+  gross_loss: string;
+  win_rate: number;
+  profit_factor: number;
+  expectancy: string;
+  avg_hold_seconds: number;
+  total_fees: string;
+  by_coin: CoinAnalytics[];
+  by_strategy: CoinAnalytics[];
+  by_exit_reason: Record<string, number>;
+}
+
+export interface AssetBalance {
+  asset: string;
+  free: number;
+  locked: number;
+  total: number;
+}
+
+export interface CapitalEntry {
+  ts: string | null;
+  amount: number;
+  equity_after: number | null;
+}
+
+export interface Account {
+  quote_asset: string;
+  wallet_equity: number | null;
+  bot_equity: number;
+  bot_cash: number;
+  assets: AssetBalance[];
+  capital_history: CapitalEntry[];
+}

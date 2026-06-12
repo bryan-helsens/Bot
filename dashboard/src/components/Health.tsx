@@ -1,21 +1,7 @@
 import { api } from "../api/client";
+import { ago as age, cls, money, signedMoney } from "../format";
 import { usePolling } from "../hooks/usePolling";
 import type { SystemStatus, TradingStats } from "../types";
-
-function age(s: number | null): string {
-  if (s === null) return "—";
-  if (s < 90) return `${Math.round(s)}s ago`;
-  if (s < 5400) return `${Math.round(s / 60)}m ago`;
-  return `${Math.round(s / 3600)}h ago`;
-}
-
-function money(v: string): { text: string; cls: string } {
-  const n = parseFloat(v);
-  return {
-    text: `${n >= 0 ? "+" : ""}${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
-    cls: n > 0 ? "pos" : n < 0 ? "neg" : "",
-  };
-}
 
 /** Health (is the bot alive?) + realised performance at a glance. */
 export function Health() {
@@ -23,8 +9,6 @@ export function Health() {
   const { data: stats } = usePolling<TradingStats>(() => api.stats(), 5000);
 
   const candleStale = status?.candle_stale ?? false;
-  const today = stats ? money(stats.today_pnl) : null;
-  const week = stats ? money(stats.week_pnl) : null;
 
   return (
     <div className="panel">
@@ -49,11 +33,16 @@ export function Health() {
           </tr>
           <tr>
             <th>PnL today (closed)</th>
-            <td className={today?.cls}>{today?.text ?? "—"} <span className="muted">({stats?.today_trades ?? 0} closed)</span></td>
+            <td className={stats ? cls(stats.today_pnl) : ""}>
+              {stats ? signedMoney(stats.today_pnl) : "—"}{" "}
+              <span className="muted">({stats?.today_trades ?? 0} closed)</span>
+            </td>
           </tr>
           <tr>
             <th>PnL this week</th>
-            <td className={week?.cls}>{week?.text ?? "—"}</td>
+            <td className={stats ? cls(stats.week_pnl) : ""}>
+              {stats ? signedMoney(stats.week_pnl) : "—"}
+            </td>
           </tr>
           <tr>
             <th>Win rate</th>
@@ -61,14 +50,14 @@ export function Health() {
           </tr>
           <tr>
             <th>Fees paid</th>
-            <td className="muted">{stats ? parseFloat(stats.total_fees).toFixed(2) : "—"}</td>
+            <td className="muted">{stats ? money(stats.total_fees) : "—"}</td>
           </tr>
           <tr>
             <th>Best / worst</th>
             <td>
-              <span className="pos">+{stats ? parseFloat(stats.best_trade).toFixed(2) : "—"}</span>{" "}
+              <span className="pos">{stats ? signedMoney(stats.best_trade) : "—"}</span>{" "}
               /{" "}
-              <span className="neg">{stats ? parseFloat(stats.worst_trade).toFixed(2) : "—"}</span>
+              <span className="neg">{stats ? signedMoney(stats.worst_trade) : "—"}</span>
             </td>
           </tr>
         </tbody>

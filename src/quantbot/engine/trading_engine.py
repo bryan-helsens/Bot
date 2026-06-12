@@ -73,6 +73,7 @@ class TradingEngine(LoggerMixin):
         self._bus = event_bus
         self._running = False
         self._paused = False  # when True: manage existing positions but open no new ones
+        self._muted: set[str] = set()  # symbols excluded from NEW automated entries
         self._last_candle_at: datetime | None = None
         self._last_trade_at: datetime | None = None
         self._snapshot_task: asyncio.Task[None] | None = None
@@ -202,6 +203,8 @@ class TradingEngine(LoggerMixin):
             return None
         if self._paused:
             return None  # paused: keep managing existing positions, open no new ones
+        if symbol in self._muted:
+            return None  # this coin is muted: no automated entries (manual still allowed)
 
         atr = self._atr_for(candle)
         position = await self._executor.execute_signal(result.signal, atr=atr)
@@ -302,6 +305,132 @@ class TradingEngine(LoggerMixin):
             except Exception:  # noqa: BLE001
                 rsi_val = None
         return {"rsi": rsi_val, "prices": prices, "times": times, "price_timeframe": tf.value}
+
+    # ------------------------------------------------------------------ per-coin mute
+
+    def muted_symbols(self) -> list[str]:
+        """Symbols currently excluded from new automated entries."""
+        return sorted(self._muted)
+
+    def mute_symbol(self, symbol: str) -> dict:
+        """Stop the bot opening NEW automated positions on *symbol* (manual still works)."""
+        symbol = symbol.upper()
+        self._muted.add(symbol)
+        self.log.info("symbol_muted", symbol=symbol)
+        return {"ok": True, "detail": f"{symbol} muted — no new automated entries"}
+
+    def unmute_symbol(self, symbol: str) -> dict:
+        """Re-enable automated entries on *symbol*."""
+        symbol = symbol.upper()
+        self._muted.discard(symbol)
+        self.log.info("symbol_unmuted", symbol=symbol)
+        return {"ok": True, "detail": f"{symbol} unmuted — automated entries allowed"}
+
+    # ------------------------------------------------------------------ market scanner
+
+    def market_scanner(self) -> list[dict]:
+        """Live per-coin snapshot for the dashboard scanner.
+
+        For every warmed-up symbol: latest price, RSI(14), fast/slow EMA and their
+        relationship, plus a coarse ``signal`` label so you can see at a glance WHY
+        the bot is (not yet) trading a coin and which ones are closest to an entry.
+        """
+        import numpy as np
+
+        from quantbot.indicators.momentum import rsi as rsi_fn
+        from quantbot.indicators.trend import ema as ema_fn
+
+        if not self._settings.timeframes:
+            return []
+        tf = min(self._settings.timeframes, key=lambda t: t.seconds)
+        rows: list[dict] = []
+        for symbol in self._market_data.active_symbols():
+            series = self._market_data.series(symbol, tf)
+            closes = series.closes()
+            if len(closes) < 22:
+                continue
+            price = float(closes[-1])
+
+            def _last(fn, *a) -> float | None:
+                try:
+                    val = fn(*a)[-1]
+                    return None if val is None or np.isnan(val) else float(val)
+                except Exception:  # noqa: BLE001 - indicator robustness
+                    return None
+
+            rsi_val = _last(rsi_fn, closes, 14)
+            ema_fast = _last(ema_fn, closes, 9)
+            ema_slow = _last(ema_fn, closes, 21)
+
+            trend = None
+            gap_pct = None
+            if ema_fast is not None and ema_slow is not None and price:
+                trend = "up" if ema_fast >= ema_slow else "down"
+                gap_pct = round((ema_fast - ema_slow) / price * 100, 3)
+
+            # Coarse signal label, mirroring the shipped strategies' logic.
+            signal = "neutral"
+            if rsi_val is not None:
+                if rsi_val < 30:
+                    signal = "oversold"
+                elif rsi_val < 40:
+                    signal = "dip-watch"
+                elif rsi_val > 70:
+                    signal = "overbought"
+            if trend == "up" and gap_pct is not None and 0 < gap_pct < 0.15:
+                signal = "trend-cross"
+
+            pos = self._portfolio.positions.get(symbol)
+            rows.append({
+                "symbol": symbol,
+                "price": round(price, 8),
+                "rsi": None if rsi_val is None else round(rsi_val, 1),
+                "ema_fast": None if ema_fast is None else round(ema_fast, 8),
+                "ema_slow": None if ema_slow is None else round(ema_slow, 8),
+                "trend": trend,
+                "ema_gap_pct": gap_pct,
+                "signal": signal,
+                "timeframe": tf.value,
+                "has_position": bool(pos is not None and pos.is_open),
+                "muted": symbol in self._muted,
+            })
+        rows.sort(key=lambda r: (r["rsi"] if r["rsi"] is not None else 999))
+        return rows
+
+    # ------------------------------------------------------------------ account overview
+
+    async def account_overview(self) -> dict:
+        """Real exchange balances per asset + bot-equity vs wallet-equity.
+
+        The wallet is the exchange truth (on testnet: faucet play-money); the bot's
+        equity is its own tracked capital. They legitimately differ — this surfaces
+        both side by side so the difference is never mistaken for a bug.
+        """
+        assets: list[dict] = []
+        wallet_equity = None
+        quote = self._settings.quote_asset
+        try:
+            account = await self._gateway.get_account()
+            wallet_equity = float(account.total_equity)
+            for asset, bal in sorted(account.balances.items()):
+                total = float(bal.total)
+                if total <= 0:
+                    continue
+                assets.append({
+                    "asset": asset,
+                    "free": float(bal.free),
+                    "locked": float(bal.locked),
+                    "total": total,
+                })
+        except Exception as exc:  # noqa: BLE001 - account fetch is best-effort
+            self.log.warning("account_overview_failed", error=str(exc))
+        return {
+            "quote_asset": quote,
+            "wallet_equity": wallet_equity,
+            "bot_equity": float(self._portfolio.equity()),
+            "bot_cash": float(self._portfolio.cash),
+            "assets": assets,
+        }
 
     def heartbeat(self) -> dict:
         """Liveness signals for the dashboard health panel."""
