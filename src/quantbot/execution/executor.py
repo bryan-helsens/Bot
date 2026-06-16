@@ -16,6 +16,7 @@ order. Protective take-profits are managed dynamically by the engine via the
 
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
 
 from quantbot.core.constants import MarketType, OrderType, Side
@@ -28,6 +29,31 @@ from quantbot.exchanges.base import ExchangeGateway, OrderRequest
 from quantbot.execution.order_manager import OrderManager
 from quantbot.portfolio.manager import PortfolioManager
 from quantbot.risk.engine import OrderProposal, RiskEngine
+
+
+class _OrderRateLimiter:
+    """Space out NEW-order submissions to stay under the exchange rate limit.
+
+    Binance rejects bursts with ``-1015 Too many new orders`` (50 per 10s). When
+    many candles close together the bot can fire dozens of entries+stops at once;
+    without spacing, some protective stops fail to place and a position runs
+    unprotected. This serialises submissions to at most one per ``min_interval``.
+    """
+
+    def __init__(self, min_interval: float = 0.22) -> None:
+        self._min_interval = min_interval
+        self._next_at = 0.0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            wait = self._next_at - now
+            if wait > 0:
+                await asyncio.sleep(wait)
+                now = loop.time()
+            self._next_at = now + self._min_interval
 
 
 class OrderExecutor(LoggerMixin):
@@ -49,6 +75,12 @@ class OrderExecutor(LoggerMixin):
         self._orders = order_manager or OrderManager()
         self._bus = event_bus
         self._commission_rate = commission_rate
+        self._rate_limiter = _OrderRateLimiter()
+
+    async def _submit_order(self, request: OrderRequest) -> Order:
+        """Place a NEW order through the rate limiter (avoids -1015 bursts)."""
+        await self._rate_limiter.acquire()
+        return await self._gateway.create_order(request)
 
     @property
     def orders(self) -> OrderManager:
@@ -66,7 +98,7 @@ class OrderExecutor(LoggerMixin):
         proposal = await self._enforce_min_notional(proposal)
         if proposal is None:
             return None
-        return await self._open_from_proposal(proposal)
+        return await self._open_from_proposal(proposal, strategy=signal.strategy)
 
     async def _enforce_min_notional(self, proposal: OrderProposal) -> OrderProposal | None:
         """Keep an entry order at/above the exchange minimum notional.
@@ -101,7 +133,9 @@ class OrderExecutor(LoggerMixin):
         proposal.quantity = bumped_qty
         return proposal
 
-    async def _open_from_proposal(self, proposal: OrderProposal) -> Position | None:
+    async def _open_from_proposal(
+        self, proposal: OrderProposal, *, strategy: str | None = None
+    ) -> Position | None:
         """Place the entry order and open the position from an approved proposal."""
         request = OrderRequest(
             symbol=proposal.symbol,
@@ -110,7 +144,7 @@ class OrderExecutor(LoggerMixin):
             quantity=proposal.quantity,
         )
         try:
-            order = await self._gateway.create_order(request)
+            order = await self._submit_order(request)
         except ExchangeError as exc:
             self.log.error("entry_order_failed", symbol=proposal.symbol, error=str(exc))
             raise ExecutionError(f"Entry order failed: {exc}") from exc
@@ -128,7 +162,7 @@ class OrderExecutor(LoggerMixin):
             side=proposal.side,
             quantity=filled_qty,
             entry_price=fill_price,
-            strategy=None,
+            strategy=strategy,
             stop_loss=proposal.stop_loss,
             take_profit_levels=proposal.take_profit_levels,
             fee=fee,
@@ -209,7 +243,7 @@ class OrderExecutor(LoggerMixin):
             reduce_only=True,
         )
         try:
-            stop_order = await self._gateway.create_order(request)
+            stop_order = await self._submit_order(request)
             self._orders.track(stop_order)
             position.meta["stop_order_id"] = stop_order.client_order_id
         except ExchangeError as exc:
@@ -249,7 +283,7 @@ class OrderExecutor(LoggerMixin):
         await self._cancel_stop(position)
         position.meta.pop("stop_order_id", None)
         try:
-            order = await self._gateway.create_order(request)
+            order = await self._submit_order(request)
         except ExchangeError as exc:
             if _is_dust_error(exc):
                 # The slice to take profit on is too small to trade — keep the whole
@@ -305,7 +339,7 @@ class OrderExecutor(LoggerMixin):
         # balance — it's reserved by the stop order).
         await self._cancel_stop(position)
         try:
-            order = await self._gateway.create_order(request)
+            order = await self._submit_order(request)
         except ExchangeError as exc:
             if _is_dust_error(exc):
                 # The remaining holding is too small to sell (below the exchange's

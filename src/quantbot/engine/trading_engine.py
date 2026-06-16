@@ -185,15 +185,17 @@ class TradingEngine(LoggerMixin):
         if not result.actionable or result.signal is None:
             return None
 
-        # 4. If we already hold a position, an opposite signal closes it (a sell
-        #    exits a long, a buy exits a short); a same-side signal is ignored
-        #    (no pyramiding). New entries only happen when flat.
+        # 4. If we already hold a position: by default we let it run to its
+        #    TP/SL/trailing exit rather than closing on every opposite signal —
+        #    those signal-flips were tiny round-trips that bled fees. Only close
+        #    here when explicitly enabled (RISK__EXIT_ON_OPPOSITE_SIGNAL=true).
+        #    A same-side signal is always ignored (no pyramiding).
         held = self._portfolio.positions.get(symbol)
         if held is not None and held.is_open:
             opposes = (
                 result.signal.side is Side.SELL and held.side is PositionSide.LONG
             ) or (result.signal.side is Side.BUY and held.side is PositionSide.SHORT)
-            if opposes:
+            if opposes and self._settings.risk.exit_on_opposite_signal:
                 await self._executor.close_position(held, exit_price=price, reason=ExitReason.SIGNAL)
             return None
 

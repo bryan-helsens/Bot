@@ -185,7 +185,10 @@ class SignalAggregator(LoggerMixin):
         take_profit = _furthest_tp(side, tps, ref_price)
 
         consolidated = Signal(
-            strategy="aggregator",
+            # Keep the contributing strategy name(s) so trades are attributable in
+            # analytics (e.g. "rsi_dip_buyer" or "ema_trend+rsi_dip_buyer"), instead
+            # of a generic "aggregator" that hides which edge actually pays.
+            strategy="+".join(contributors) if contributors else "aggregator",
             symbol=symbol,
             timeframe=signals[0].timeframe,
             side=side,

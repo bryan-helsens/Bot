@@ -30,7 +30,9 @@ strategies:
     timeframes: [5m, 15m]
     params:
       period: 14
-      oversold: 40
+      # 32 (not 40): only buy genuinely oversold dips. 40 fired too often and,
+      # combined with exiting on every opposite signal, over-traded into fees.
+      oversold: 32
       overbought: 70
 
   # Strategy 2 — EMA trend follower: go long on a golden cross (fast EMA crosses

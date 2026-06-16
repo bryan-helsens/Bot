@@ -160,6 +160,10 @@ class RiskSettings(BaseModel):
         ]
     )
     max_open_trades: Annotated[int, Field(ge=1)] = 5
+    # When True, an opposite signal closes an open position. Default False: let
+    # winners/losers run to TP/SL/trailing instead of churning on every flip — the
+    # signal-flip exits were tiny round-trips that just bled fees (43% of gross).
+    exit_on_opposite_signal: bool = False
     max_exposure_per_coin: Annotated[Decimal, Field(gt=0, le=1)] = Decimal("0.20")
     max_portfolio_exposure: Annotated[Decimal, Field(gt=0, le=1)] = Decimal("0.60")
     max_daily_loss: Annotated[Decimal, Field(gt=0, le=1)] = Decimal("0.05")
