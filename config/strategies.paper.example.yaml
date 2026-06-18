@@ -35,15 +35,14 @@ strategies:
       oversold: 32
       overbought: 70
 
-  # Strategy 2 — EMA trend follower: go long on a golden cross (fast EMA crosses
-  # ABOVE slow). Complements the RSI dip-buyer: RSI catches reversals, EMA catches
-  # trend starts, so the bot trades in more market regimes. A death cross (fast
-  # below slow) on a coin you hold EXITS it (opposite signal closes the long); with
-  # no position it's a no-op on spot (you can't short). 9/21 is responsive on 5m/15m.
+  # Strategy 2 — EMA trend follower. DISABLED after live data: over a 100-trade
+  # testnet run it scored 19% win rate, profit factor 0.14 and lost -2.45 USDT —
+  # it caused ~72% of the total loss while RSI alone was near break-even (PF 0.90).
+  # Re-enable only if you re-validate it; trend-following on 5m chop bleeds.
   - name: ema_trend
     class: EMACrossoverStrategy
     market: spot
-    enabled: true
+    enabled: false
     symbols: []
     timeframes: [5m, 15m]
     params:
