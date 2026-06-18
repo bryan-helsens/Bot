@@ -34,6 +34,10 @@ strategies:
       # combined with exiting on every opposite signal, over-traded into fees.
       oversold: 32
       overbought: 70
+      # Only buy a dip when price is at/above its 50-period average (up/sideways
+      # regime). Skips falling knives — the repeated downtrend stop-outs in live data.
+      trend_filter: true
+      trend_period: 50
 
   # Strategy 2 — EMA trend follower. DISABLED after live data: over a 100-trade
   # testnet run it scored 19% win rate, profit factor 0.14 and lost -2.45 USDT —

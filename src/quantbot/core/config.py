@@ -164,6 +164,10 @@ class RiskSettings(BaseModel):
     # winners/losers run to TP/SL/trailing instead of churning on every flip — the
     # signal-flip exits were tiny round-trips that just bled fees (43% of gross).
     exit_on_opposite_signal: bool = False
+    # After a LOSING exit on a symbol, ignore new entry signals for it for this many
+    # seconds. Stops the bot re-buying a coin that just stopped out (live data showed
+    # coins re-entered and lost 3-4 times in a row). 0 disables it.
+    reentry_cooldown_seconds: Annotated[int, Field(ge=0)] = 0
     max_exposure_per_coin: Annotated[Decimal, Field(gt=0, le=1)] = Decimal("0.20")
     max_portfolio_exposure: Annotated[Decimal, Field(gt=0, le=1)] = Decimal("0.60")
     max_daily_loss: Annotated[Decimal, Field(gt=0, le=1)] = Decimal("0.05")

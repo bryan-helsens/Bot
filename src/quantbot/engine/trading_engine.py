@@ -74,6 +74,7 @@ class TradingEngine(LoggerMixin):
         self._running = False
         self._paused = False  # when True: manage existing positions but open no new ones
         self._muted: set[str] = set()  # symbols excluded from NEW automated entries
+        self._last_loss_at: dict[str, datetime] = {}  # symbol -> time of last losing exit
         self._last_candle_at: datetime | None = None
         self._last_trade_at: datetime | None = None
         self._snapshot_task: asyncio.Task[None] | None = None
@@ -207,6 +208,9 @@ class TradingEngine(LoggerMixin):
             return None  # paused: keep managing existing positions, open no new ones
         if symbol in self._muted:
             return None  # this coin is muted: no automated entries (manual still allowed)
+        if self._in_reentry_cooldown(symbol):
+            self.log.info("entry_skipped_cooldown", symbol=symbol)
+            return None  # just lost on this coin — wait before re-entering
 
         atr = self._atr_for(candle)
         position = await self._executor.execute_signal(result.signal, atr=atr)
@@ -281,8 +285,28 @@ class TradingEngine(LoggerMixin):
         verb = "Deposited" if amount >= 0 else "Withdrew"
         return {"ok": True, "detail": f"{verb} {abs(amount)} — equity now {equity:.2f}"}
 
-    async def _on_trade_event(self, _event: Event) -> None:
+    async def _on_trade_event(self, event: Event) -> None:
         self._last_trade_at = utcnow()
+        # Record losing exits so we can cool down before re-entering the same coin.
+        if event.type is EventType.TRADE_CLOSED:
+            payload = event.payload or {}
+            symbol = payload.get("symbol")
+            try:
+                pnl = Decimal(str(payload.get("net_pnl", "0")))
+            except (ArithmeticError, ValueError, TypeError):
+                pnl = Decimal("0")
+            if symbol and pnl < 0:
+                self._last_loss_at[symbol] = utcnow()
+
+    def _in_reentry_cooldown(self, symbol: str) -> bool:
+        """True if *symbol* had a losing exit within the configured cooldown."""
+        cooldown = self._settings.risk.reentry_cooldown_seconds
+        if cooldown <= 0:
+            return False
+        last_loss = self._last_loss_at.get(symbol)
+        if last_loss is None:
+            return False
+        return (utcnow() - last_loss).total_seconds() < cooldown
 
     def coin_market_snapshot(self, symbol: str) -> dict:
         """Recent closes (+ timestamps) and current RSI(14) for a coin."""
