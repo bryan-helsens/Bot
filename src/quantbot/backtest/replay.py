@@ -62,8 +62,14 @@ async def replay_candles(
     timeframe: Timeframe,
     *,
     warmup: int = 120,
+    param_overrides: dict | None = None,
 ) -> dict:
-    """Replay pre-loaded candles through the real engine; return a result summary."""
+    """Replay pre-loaded candles through the real engine; return a result summary.
+
+    *param_overrides* (e.g. ``{"oversold": 35, "trend_filter": False}``) is applied
+    live to every loaded strategy that declares those params — used by the sweep to
+    compare variants on identical history without editing config files.
+    """
     from quantbot.engine.runtime import build_runtime
 
     settings = settings.model_copy(deep=True)
@@ -73,6 +79,12 @@ async def replay_candles(
     portfolio = runtime.portfolio
     runtime.executor.set_rate_limit(0.0)  # no real-time throttle in a backtest
     market_data = engine.market_data
+
+    if param_overrides:
+        for strat in runtime.strategies:
+            applicable = {k: v for k, v in param_overrides.items() if k in strat.params}
+            if applicable:
+                strat.update_params(applicable)
 
     # Seed permissive symbol info so the executor's min-notional check never makes a
     # per-trade network call (orders are well above min-notional in a backtest anyway).

@@ -451,6 +451,99 @@ def _print_replay(r: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# sweep
+# ---------------------------------------------------------------------------
+
+
+#: (label, strategy-param overrides, risk-setting overrides)
+_SWEEP_VARIANTS: list[tuple[str, dict, dict]] = [
+    ("baseline (current config)", {}, {}),
+    ("trend_filter OFF", {"trend_filter": False}, {}),
+    ("oversold 30", {"oversold": 30}, {}),
+    ("oversold 35", {"oversold": 35}, {}),
+    ("trend_period 30", {"trend_period": 30}, {}),
+    ("cooldown OFF", {}, {"reentry_cooldown_seconds": 0}),
+    ("cooldown 1h", {}, {"reentry_cooldown_seconds": 3600}),
+    ("exit-on-signal ON", {}, {"exit_on_opposite_signal": True}),
+]
+
+
+@app.command()
+def sweep(
+    days: Annotated[int, typer.Option(help="Days of history to replay")] = 30,
+    timeframe: Annotated[str, typer.Option(help="Candle timeframe (default: smallest configured)")] = "",
+    limit: Annotated[int, typer.Option(help="Cap number of symbols (0 = all)")] = 10,
+) -> None:
+    """Compare config variants on the SAME history in one run (fast tuning).
+
+    Backtests your current config plus several tweaks (trend filter on/off,
+    oversold levels, cooldown, exit-on-signal) and ranks them by profit factor,
+    so you can see which setting backtests best before touching live.
+    """
+    _setup()
+    asyncio.run(_run_sweep(days, timeframe, limit))
+
+
+async def _run_sweep(days: int, timeframe: str, limit: int) -> None:
+    from datetime import timedelta
+
+    from quantbot.backtest.replay import load_history, replay_candles
+
+    settings = get_settings()
+    if not settings.symbols:
+        console.print("[red]No SYMBOLS configured in .env.[/]")
+        raise typer.Exit(1)
+    tf = Timeframe.from_string(timeframe) if timeframe else min(settings.timeframes, key=lambda t: t.seconds)
+    symbols = list(settings.symbols)[: limit or None]
+    end_dt = datetime.now(UTC)
+    start_dt = end_dt - timedelta(days=days)
+
+    console.print(f"[cyan]Loading history once[/] · {len(symbols)} symbols · {tf.value} · {days}d …")
+    candles = await load_history(settings, symbols, tf, start_dt, end_dt)
+    if not candles:
+        console.print("[red]No history loaded.[/]")
+        raise typer.Exit(1)
+
+    rows = []
+    for label, strat_over, risk_over in _SWEEP_VARIANTS:
+        variant_settings = settings.model_copy(deep=True)
+        for key, val in risk_over.items():
+            setattr(variant_settings.risk, key, val)
+        console.print(f"  running: [bold]{label}[/] …")
+        r = await replay_candles(variant_settings, candles, tf, param_overrides=strat_over)
+        rows.append((label, r))
+
+    rows.sort(key=lambda lr: (lr[1]["profit_factor"], lr[1]["net_pnl"]), reverse=True)
+
+    table = Table(title=f"Sweep — {len(candles)} symbols · {tf.value} · {days}d (ranked by profit factor)")
+    table.add_column("Variant")
+    for col in ("Trades", "Net PnL", "PF", "Win%", "Fees%", "MaxDD"):
+        table.add_column(col, justify="right")
+    for label, r in rows:
+        pf = r["profit_factor"]
+        table.add_row(
+            label,
+            str(r["trades"]),
+            f"{r['net_pnl']:+.2f}",
+            f"[green]{pf:.2f}[/]" if pf > 1 else f"[red]{pf:.2f}[/]",
+            f"{r['win_rate'] * 100:.0f}%",
+            "—" if r["fees_pct_of_gross"] is None else f"{r['fees_pct_of_gross']:.0f}%",
+            f"{r['max_drawdown_pct']:.1f}%",
+        )
+    console.print(table)
+    bench = rows[0][1]["benchmark_pct"]
+    console.print(
+        f"[dim]Buy & hold {rows[0][1]['benchmark_symbol']}: "
+        f"{'—' if bench is None else f'{bench:+.2f}%'} · amounts in USDT[/]"
+    )
+    best = rows[0]
+    if best[1]["profit_factor"] <= 1 or best[1]["net_pnl"] <= 0:
+        console.print("[yellow]No variant is net-positive with an edge in this window — keep iterating.[/]")
+    else:
+        console.print(f"[green]Best in this sweep:[/] {best[0]} (PF {best[1]['profit_factor']:.2f})")
+
+
+# ---------------------------------------------------------------------------
 # optimize
 # ---------------------------------------------------------------------------
 

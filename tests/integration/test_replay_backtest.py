@@ -71,6 +71,17 @@ async def test_replay_runs_and_summarises() -> None:
     assert 0.0 <= result["win_rate"] <= 1.0
 
 
+async def test_replay_accepts_param_overrides() -> None:
+    """The sweep relies on overriding strategy params live without editing files."""
+    candles = {"BTCUSDT": _candles("BTCUSDT", list(np.linspace(100, 130, 300)))}
+    result = await replay_candles(
+        _settings(), candles, Timeframe.M5, warmup=80,
+        param_overrides={"trend_filter": False, "oversold": 35},
+    )
+    assert result["symbols"] == 1
+    assert "profit_factor" in result and "net_pnl" in result
+
+
 async def test_replay_empty_history_is_zero_trades() -> None:
     result = await replay_candles(_settings(), {}, Timeframe.M5, warmup=80)
     assert result["candles_replayed"] == 0
