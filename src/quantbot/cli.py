@@ -473,18 +473,20 @@ def sweep(
     days: Annotated[int, typer.Option(help="Days of history to replay")] = 30,
     timeframe: Annotated[str, typer.Option(help="Candle timeframe (default: smallest configured)")] = "",
     limit: Annotated[int, typer.Option(help="Cap number of symbols (0 = all)")] = 10,
+    start: Annotated[str, typer.Option(help="Window start YYYY-MM-DD (test a past period)")] = "",
 ) -> None:
     """Compare config variants on the SAME history in one run (fast tuning).
 
     Backtests your current config plus several tweaks (trend filter on/off,
     oversold levels, cooldown, exit-on-signal) and ranks them by profit factor,
-    so you can see which setting backtests best before touching live.
+    so you can see which setting backtests best before touching live. Use --start
+    to test a DIFFERENT market regime (mean-reversion needs ranging/up markets).
     """
     _setup()
-    asyncio.run(_run_sweep(days, timeframe, limit))
+    asyncio.run(_run_sweep(days, timeframe, limit, start))
 
 
-async def _run_sweep(days: int, timeframe: str, limit: int) -> None:
+async def _run_sweep(days: int, timeframe: str, limit: int, start: str = "") -> None:
     from datetime import timedelta
 
     from quantbot.backtest.replay import load_history, replay_candles
@@ -495,8 +497,12 @@ async def _run_sweep(days: int, timeframe: str, limit: int) -> None:
         raise typer.Exit(1)
     tf = Timeframe.from_string(timeframe) if timeframe else min(settings.timeframes, key=lambda t: t.seconds)
     symbols = list(settings.symbols)[: limit or None]
-    end_dt = datetime.now(UTC)
-    start_dt = end_dt - timedelta(days=days)
+    if start:
+        start_dt = datetime.fromisoformat(start).replace(tzinfo=UTC)
+        end_dt = start_dt + timedelta(days=days)
+    else:
+        end_dt = datetime.now(UTC)
+        start_dt = end_dt - timedelta(days=days)
 
     console.print(f"[cyan]Loading history once[/] · {len(symbols)} symbols · {tf.value} · {days}d …")
     candles = await load_history(settings, symbols, tf, start_dt, end_dt)
