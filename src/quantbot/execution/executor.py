@@ -82,6 +82,10 @@ class OrderExecutor(LoggerMixin):
         await self._rate_limiter.acquire()
         return await self._gateway.create_order(request)
 
+    def set_rate_limit(self, min_interval: float) -> None:
+        """Adjust order spacing (set 0 to disable, e.g. for fast backtests)."""
+        self._rate_limiter = _OrderRateLimiter(min_interval)
+
     @property
     def orders(self) -> OrderManager:
         return self._orders

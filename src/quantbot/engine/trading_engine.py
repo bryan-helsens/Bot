@@ -245,6 +245,11 @@ class TradingEngine(LoggerMixin):
     def paused(self) -> bool:
         return self._paused
 
+    @property
+    def market_data(self) -> MarketDataService:
+        """The engine's market-data service (used by the replay backtester)."""
+        return self._market_data
+
     def pause(self) -> None:
         """Stop opening NEW positions; existing ones keep being managed."""
         self._paused = True

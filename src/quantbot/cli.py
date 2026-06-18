@@ -359,6 +359,97 @@ async def _run_backtest(
     console.print(f"[green]Reports written to[/] {out}")
 
 
+@app.command()
+def replay(
+    days: Annotated[int, typer.Option(help="How many days of history to replay")] = 30,
+    timeframe: Annotated[str, typer.Option(help="Candle timeframe (default: smallest configured)")] = "",
+    limit: Annotated[int, typer.Option(help="Cap number of symbols (0 = all configured)")] = 0,
+    start: Annotated[str, typer.Option(help="Start date YYYY-MM-DD (overrides --days)")] = "",
+) -> None:
+    """Backtest your ACTUAL config (strategies.yaml + risk) over real history.
+
+    Replays mainnet candles through the real engine, so results reflect the live
+    behaviour (trend filter, no-churn, cooldown, risk gates) with realistic paper
+    fills. Fast way to test a change before committing days to a live run.
+    """
+    _setup()
+    asyncio.run(_run_replay(days, timeframe, limit, start))
+
+
+async def _run_replay(days: int, timeframe: str, limit: int, start: str) -> None:
+    from datetime import timedelta
+
+    from quantbot.backtest.replay import run_replay
+
+    settings = get_settings()
+    if not settings.symbols:
+        console.print("[red]No SYMBOLS configured in .env.[/]")
+        raise typer.Exit(1)
+    tf = Timeframe.from_string(timeframe) if timeframe else min(settings.timeframes, key=lambda t: t.seconds)
+    symbols = list(settings.symbols)
+    if limit > 0:
+        symbols = symbols[:limit]
+    end_dt = datetime.now(UTC)
+    start_dt = datetime.fromisoformat(start).replace(tzinfo=UTC) if start else end_dt - timedelta(days=days)
+
+    console.print(
+        f"[cyan]Replaying[/] {len(symbols)} symbols · {tf.value} · "
+        f"{start_dt.date()} → {end_dt.date()} … (fetching history)"
+    )
+    result = await run_replay(settings, symbols=symbols, timeframe=tf, start=start_dt, end=end_dt)
+    _print_replay(result)
+
+
+def _print_replay(r: dict) -> None:
+    def usdt(v: float) -> str:
+        return f"{v:+,.2f} USDT" if v else "0.00 USDT"
+
+    head = Table(title="Backtest (replay of your live config)")
+    head.add_column("Metric")
+    head.add_column("Value", justify="right")
+    pf = r["profit_factor"]
+    head.add_row("Symbols / candles", f"{r['symbols']} / {r['candles_replayed']:,}")
+    head.add_row("Trades", str(r["trades"]))
+    head.add_row("Net PnL (after fees)", usdt(r["net_pnl"]))
+    head.add_row("Return", f"{r['bot_return_pct']:+.2f}%")
+    bench = r["benchmark_pct"]
+    head.add_row(
+        f"Buy & hold {r['benchmark_symbol']}",
+        "—" if bench is None else f"{bench:+.2f}%",
+    )
+    head.add_row("Win rate", f"{r['win_rate'] * 100:.1f}%")
+    head.add_row("Profit factor", f"{pf:.2f}  ({'edge' if pf > 1 else 'no edge'})")
+    head.add_row("Expectancy / trade", usdt(r["expectancy"]))
+    head.add_row("Fees", f"{r['fees']:.2f} USDT")
+    fpg = r["fees_pct_of_gross"]
+    head.add_row("Fees % of gross profit", "—" if fpg is None else f"{fpg:.1f}%")
+    head.add_row("Max drawdown", f"{r['max_drawdown_pct']:.2f}%")
+    console.print(head)
+
+    if r["by_strategy"]:
+        st = Table(title="Per strategy")
+        st.add_column("Strategy")
+        st.add_column("Net PnL", justify="right")
+        for name, pnl in r["by_strategy"].items():
+            st.add_row(name, usdt(pnl))
+        console.print(st)
+
+    coins = list(r["by_coin"].items())
+    if coins:
+        worst = Table(title="Worst / best coins")
+        worst.add_column("Coin")
+        worst.add_column("Net PnL", justify="right")
+        for name, pnl in coins[:5] + coins[-5:]:
+            worst.add_row(name, usdt(pnl))
+        console.print(worst)
+
+    verdict = (
+        "Net positive after fees" if r["net_pnl"] > 0 else
+        "Net NEGATIVE after fees — no edge demonstrated. Keep iterating; do not risk real money."
+    )
+    console.print(f"\n[bold]{verdict}[/]")
+
+
 # ---------------------------------------------------------------------------
 # optimize
 # ---------------------------------------------------------------------------
