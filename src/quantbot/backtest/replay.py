@@ -40,7 +40,10 @@ async def load_history(
     await gateway.connect()
     out: dict[str, list[Candle]] = {}
     try:
-        loader = HistoricalDataLoader(gateway)
+        # use_cache=False: the on-disk cache is keyed only by symbol+timeframe and
+        # can serve stale/partial data for a different window — unacceptable for a
+        # backtest. Always fetch the exact requested window fresh.
+        loader = HistoricalDataLoader(gateway, use_cache=False)
         for symbol in symbols:
             try:
                 candles = await loader.load(symbol, timeframe, start, end)
