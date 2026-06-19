@@ -30,13 +30,15 @@ strategies:
     timeframes: [5m, 15m]
     params:
       period: 14
-      # 32 (not 40): only buy genuinely oversold dips. 40 fired too often and,
-      # combined with exiting on every opposite signal, over-traded into fees.
-      oversold: 32
+      # Backtest-tuned over 4 clean windows (Jan-Jun 2026): oversold 35 + trend
+      # filter OFF was the best combo (PF ~2-4 in down/flat regimes, 78-88% win),
+      # beating the trend-filtered version in 3 of 4 windows. The filter's
+      # crash-protection turned out marginal (it barely helped in the -16% month
+      # while costing many good trades), so it's off. Flip trend_filter back to
+      # true if you want extra downside insurance at the cost of fewer trades.
+      oversold: 35
       overbought: 70
-      # Only buy a dip when price is at/above its 50-period average (up/sideways
-      # regime). Skips falling knives — the repeated downtrend stop-outs in live data.
-      trend_filter: true
+      trend_filter: false
       trend_period: 50
 
   # Strategy 2 — EMA trend follower. DISABLED after live data: over a 100-trade
