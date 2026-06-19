@@ -459,11 +459,12 @@ def _print_replay(r: dict) -> None:
 _SWEEP_VARIANTS: list[tuple[str, dict, dict]] = [
     ("baseline (current config)", {}, {}),
     ("trend_filter OFF", {"trend_filter": False}, {}),
-    ("oversold 30", {"oversold": 30}, {}),
     ("oversold 35", {"oversold": 35}, {}),
+    ("oversold 30", {"oversold": 30}, {}),
+    ("trend OFF + oversold 35", {"trend_filter": False, "oversold": 35}, {}),
+    ("trend OFF + oversold 30", {"trend_filter": False, "oversold": 30}, {}),
     ("trend_period 30", {"trend_period": 30}, {}),
     ("cooldown OFF", {}, {"reentry_cooldown_seconds": 0}),
-    ("cooldown 1h", {}, {"reentry_cooldown_seconds": 3600}),
     ("exit-on-signal ON", {}, {"exit_on_opposite_signal": True}),
 ]
 
