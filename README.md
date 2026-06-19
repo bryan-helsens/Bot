@@ -17,6 +17,10 @@
 > nooit met geld dat je niet kunt missen en begin **altijd** op het Binance
 > testnet. De auteurs zijn niet aansprakelijk voor enig financieel verlies.
 
+> 📘 **Nieuw hier? Begin met de [complete handleiding](docs/HANDLEIDING.md)** —
+> één document dat alles samenbrengt: opstarten, de gevalideerde config, het
+> dashboard, backtesten, 24/7 draaien, de weg naar echt geld en probleemoplossing.
+
 ---
 
 ## Inhoud
