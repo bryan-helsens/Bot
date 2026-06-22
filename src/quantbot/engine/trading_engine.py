@@ -75,6 +75,10 @@ class TradingEngine(LoggerMixin):
         self._paused = False  # when True: manage existing positions but open no new ones
         self._muted: set[str] = set()  # symbols excluded from NEW automated entries
         self._last_loss_at: dict[str, datetime] = {}  # symbol -> time of last losing exit
+        # Serialises the entry decision+open so a burst of candles that close at the
+        # same second can't each pass the max-open/exposure check against a stale
+        # count and all open at once (the event bus runs candle handlers concurrently).
+        self._entry_lock = asyncio.Lock()
         self._last_candle_at: datetime | None = None
         self._last_trade_at: datetime | None = None
         self._snapshot_task: asyncio.Task[None] | None = None
@@ -213,7 +217,10 @@ class TradingEngine(LoggerMixin):
             return None  # just lost on this coin — wait before re-entering
 
         atr = self._atr_for(candle)
-        position = await self._executor.execute_signal(result.signal, atr=atr)
+        # Hold the entry lock across the WHOLE risk-check-then-open so concurrent
+        # candle handlers can't collectively exceed the max-open / exposure caps.
+        async with self._entry_lock:
+            position = await self._executor.execute_signal(result.signal, atr=atr)
         return position
 
     def _atr_for(self, candle: Candle) -> Decimal | None:
