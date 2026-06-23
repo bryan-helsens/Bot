@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 
@@ -466,6 +467,15 @@ _SWEEP_VARIANTS: list[tuple[str, dict, dict]] = [
     ("trend_period 30", {"trend_period": 30}, {}),
     ("cooldown OFF", {}, {"reentry_cooldown_seconds": 0}),
     ("exit-on-signal ON", {}, {"exit_on_opposite_signal": True}),
+    # Risk/reward structure: the default 3% stop > 2% TP needs a ~60% win rate to
+    # break even. A tighter stop / closer TP lowers that bar — test if it's more
+    # robust in flat markets (where the live win rate dropped below 60%).
+    ("stop 2% (vs 3%)", {}, {"default_stop_loss_pct": Decimal("0.02")}),
+    ("tp 1.5%", {}, {"take_profit_levels": [(Decimal("0.015"), Decimal("1.0"))]}),
+    ("stop 2% + tp 2.5%", {}, {
+        "default_stop_loss_pct": Decimal("0.02"),
+        "take_profit_levels": [(Decimal("0.025"), Decimal("1.0"))],
+    }),
 ]
 
 
