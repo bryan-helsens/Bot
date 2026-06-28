@@ -148,6 +148,9 @@ Hoogtepunten:
 - **Trade Analytics** — PnL per coin én per strategie, fees, houdtijd.
 - **Performance → Profitability Report** — eerlijk go/no-go-oordeel vs buy & hold.
 - **Account** — wallet vs bot-equity + storten/opnemen (telt niet als winst).
+- **Belasting** — gerealiseerd resultaat per jaar + CSV-export voor je boekhouder
+  (België: een frequent handelende bot valt vrijwel zeker onder speculatief/33%;
+  Binance-rekening melden bij CAP + Vak XIII. Geen fiscaal advies.)
 - **Controls** — pauzeren, posities sluiten, strategie/risk live tunen.
 
 Beveiliging aanzetten (vóór echt geld of publieke toegang): zet
@@ -191,6 +194,7 @@ Volledige veiligheidsgids: **`docs/LIVE_SAFETY.md`**.
 
 ## 9. Verdere documentatie
 
+- **`docs/LANGE_TERMIJN_TEST.md`** — bevroren config + protocol voor de lange testnet-test.
 - **`docs/OVH_SETUP.md`** — server opzetten, stap voor stap.
 - **`docs/LIVE_SAFETY.md`** — alles vóór echt geld.
 - **`docs/TESTNET_PAPER_TRADING.md`** — testnet paper-trading uitleg.

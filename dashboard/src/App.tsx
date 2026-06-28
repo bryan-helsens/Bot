@@ -24,6 +24,7 @@ import { RiskTuner } from "./components/RiskTuner";
 import { StrategyPerformance } from "./components/StrategyPerformance";
 import { StrategyTuner } from "./components/StrategyTuner";
 import { SystemStatus } from "./components/SystemStatus";
+import { TaxPage } from "./components/TaxPage";
 import { TradeAnalytics } from "./components/TradeAnalytics";
 import { usePolling } from "./hooks/usePolling";
 import { useWebSocket } from "./hooks/useWebSocket";
@@ -37,6 +38,7 @@ type Page =
   | "analytics"
   | "performance"
   | "account"
+  | "tax"
   | "controls"
   | "logs";
 
@@ -48,6 +50,7 @@ const PAGES: { id: Page; label: string }[] = [
   { id: "analytics", label: "Trade Analytics" },
   { id: "performance", label: "Performance" },
   { id: "account", label: "Account" },
+  { id: "tax", label: "Belasting" },
   { id: "controls", label: "Controls & Config" },
   { id: "logs", label: "Logs" },
 ];
@@ -141,6 +144,12 @@ function Dashboard() {
       {page === "account" && (
         <div className="grid">
           <div className="col-12"><AccountPage /></div>
+        </div>
+      )}
+
+      {page === "tax" && (
+        <div className="grid">
+          <div className="col-12"><TaxPage /></div>
         </div>
       )}
 

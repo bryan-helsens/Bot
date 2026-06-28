@@ -14,6 +14,7 @@ import type {
   Position,
   Report,
   RiskStatus,
+  TaxReport,
   ScannerRow,
   StrategyInfo,
   StrategyPerformance,
@@ -97,6 +98,7 @@ export const api = {
   analytics: () => request<Analytics>("/portfolio/analytics"),
   account: () => request<Account>("/account/balances"),
   report: (days = 7) => request<Report>(`/portfolio/report?days=${days}`),
+  taxReport: () => request<TaxReport>("/tax/report"),
   strategies: () => request<StrategyInfo[]>("/strategies"),
   updateStrategyParams: (name: string, params: Record<string, string | number | boolean>) =>
     request<{ detail: string; ok: boolean }>(`/strategies/${name}/params`, {

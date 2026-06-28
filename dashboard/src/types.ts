@@ -206,6 +206,25 @@ export interface Analytics {
   by_exit_reason: Record<string, number>;
 }
 
+export interface TaxYear {
+  year: number;
+  trades: number;
+  realized_pnl: string;
+  gross_profit: string;
+  gross_loss: string;
+  fees: string;
+  wins: number;
+  losses: number;
+  capital_added: string;
+}
+
+export interface TaxReport {
+  quote_asset: string;
+  is_testnet: boolean;
+  years: TaxYear[];
+  notes: Record<string, string>;
+}
+
 export interface Report {
   days: number;
   quote_asset: string;
