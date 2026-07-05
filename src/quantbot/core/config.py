@@ -68,6 +68,22 @@ TpLevelList = Annotated[list[tuple[Decimal, Decimal]], NoDecode, BeforeValidator
 # ---------------------------------------------------------------------------
 
 
+class BitvavoSettings(BaseModel):
+    """Bitvavo API connectivity (EU/Belgium-friendly spot exchange).
+
+    Bitvavo has NO testnet: LIVE mode there is always real money and therefore
+    requires the ALLOW_LIVE_REAL_ORDERS opt-in. Validate with TRADING_MODE=paper
+    (real market data, simulated fills) first.
+    """
+
+    api_key: str = ""
+    api_secret: SecretStr = SecretStr("")
+    rest_base_url: str = "https://api.bitvavo.com/v2"
+    access_window_ms: Annotated[int, Field(gt=0)] = 10000
+    #: Audit id sent with orders (required by Bitvavo's MiCA-era API rules).
+    operator_id: int = 1001
+
+
 class BinanceSettings(BaseModel):
     """Binance API connectivity and trading defaults."""
 
@@ -336,6 +352,9 @@ class Settings(BaseSettings):
     # so a config slip can never put real money at risk by accident.
     allow_live_real_orders: bool = False
 
+    #: Which exchange adapter to trade through: "binance" or "bitvavo".
+    exchange: str = "binance"
+
     symbols: CsvStrList = Field(default_factory=lambda: ["BTCUSDT"])
     timeframes: CsvTimeframeList = Field(default_factory=lambda: [Timeframe.H1])
     quote_asset: str = "USDT"
@@ -345,6 +364,7 @@ class Settings(BaseSettings):
     state_file: str = "data/state.json"
 
     binance: BinanceSettings = Field(default_factory=BinanceSettings)
+    bitvavo: BitvavoSettings = Field(default_factory=BitvavoSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     websocket: WebSocketSettings = Field(default_factory=WebSocketSettings)
     aggregator: AggregatorSettings = Field(default_factory=AggregatorSettings)
@@ -366,6 +386,15 @@ class Settings(BaseSettings):
     def is_live(self) -> bool:
         """Whether the engine routes real (or testnet) orders."""
         return self.trading_mode is TradingMode.LIVE
+
+    @property
+    def uses_fake_money(self) -> bool:
+        """Whether LIVE orders would hit fake money (Binance testnet only).
+
+        Bitvavo has no testnet, so LIVE there is always real money and needs the
+        ALLOW_LIVE_REAL_ORDERS opt-in.
+        """
+        return self.exchange == "binance" and self.binance.testnet
 
     @model_validator(mode="after")
     def _production_safety(self) -> Settings:

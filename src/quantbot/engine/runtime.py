@@ -92,13 +92,14 @@ def build_runtime(
     # TRADING_MODE=live from touching real funds by accident.
     if (
         settings.trading_mode is TradingMode.LIVE
-        and not settings.binance.testnet
+        and not settings.uses_fake_money
         and not settings.allow_live_real_orders
     ):
         raise RuntimeError(
-            "LIVE trading on MAINNET (real money) requires an explicit opt-in. "
-            "Validate on the testnet first (BINANCE__TESTNET=true, see "
-            "docs/LIVE_SAFETY.md), then set ALLOW_LIVE_REAL_ORDERS=true for mainnet."
+            "LIVE trading with REAL money requires an explicit opt-in. Validate on "
+            "the Binance testnet (BINANCE__TESTNET=true) or in TRADING_MODE=paper "
+            "first (Bitvavo has NO testnet — LIVE there is always real money; see "
+            "docs/LIVE_SAFETY.md), then set ALLOW_LIVE_REAL_ORDERS=true."
         )
 
     bus = event_bus or EventBus()

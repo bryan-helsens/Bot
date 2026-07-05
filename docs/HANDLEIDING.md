@@ -118,6 +118,31 @@ maand is het zwakst.
 
 ---
 
+## 4b. Meerdere beurzen (Binance of Bitvavo)
+
+De bot is multi-exchange: kies de beurs met één instelling in `.env`:
+
+```bash
+EXCHANGE=binance    # standaard — laagste fees (~0,1%), heeft een testnet
+EXCHANGE=bitvavo    # EU/België — makkelijk storten (SEPA/Bancontact), EUR-paren
+```
+
+Voor Bitvavo: `cp .env.bitvavo.example .env` en vul je Bitvavo-keys in (rechten:
+alleen View + Trade, nooit Withdraw). Let op de verschillen:
+
+| | Binance | Bitvavo |
+|---|---|---|
+| Storten vanuit België | moeizaam | **makkelijk** (SEPA/Bancontact) |
+| Fees | **~0,1%** | ~0,25% |
+| Testnet (nepgeld) | **ja** | **nee** — valideren via `TRADING_MODE=paper` |
+| Paren | USDT (BTCUSDT…) | EUR (BTCEUR…) |
+
+⚠️ Omdat Bitvavo géén testnet heeft, is LIVE daar **altijd echt geld** — de bot
+weigert dat zonder `ALLOW_LIVE_REAL_ORDERS=true`. Valideer er eerst weken in
+paper-modus. En de hogere fees maken de strategie daar zwaarder: het
+`.env.bitvavo.example` simuleert bewust 0,25% commissie zodat paper-resultaten
+eerlijk blijven.
+
 ## 5. 24/7 draaien op een server
 
 Volledige stap-voor-stap voor OVH: **`docs/OVH_SETUP.md`** (ook geldig voor

@@ -24,7 +24,7 @@ def _live_settings(*, allow: bool, testnet: bool) -> Settings:
 
 
 def test_live_mainnet_refuses_to_start_without_explicit_opt_in() -> None:
-    with pytest.raises(RuntimeError, match="LIVE trading on MAINNET"):
+    with pytest.raises(RuntimeError, match="LIVE trading with REAL money"):
         build_runtime(_live_settings(allow=False, testnet=False))
 
 

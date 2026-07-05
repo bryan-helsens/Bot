@@ -49,6 +49,28 @@ def create_gateway(
         ConfigurationError: If the requested market type has no adapter.
     """
     settings = settings or get_settings()
+    exchange = settings.exchange.lower()
+
+    if exchange == "bitvavo":
+        # Bitvavo is spot-only; asking for futures there is a config error.
+        if (market or MarketType.SPOT) is not MarketType.SPOT:
+            raise ConfigurationError(
+                "Bitvavo supports SPOT only", context={"exchange": exchange}
+            )
+        from quantbot.exchanges.bitvavo import BitvavoGateway
+
+        bitvavo: ExchangeGateway = BitvavoGateway(settings, event_bus=event_bus)
+        _log.info(
+            "gateway_created", exchange=exchange, market=MarketType.SPOT.value,
+            adapter="BitvavoGateway", testnet=False,
+        )
+        return bitvavo
+    if exchange != "binance":
+        raise ConfigurationError(
+            f"Unknown exchange {settings.exchange!r} (supported: binance, bitvavo)",
+            context={"exchange": settings.exchange},
+        )
+
     market = market or settings.binance.market
     gateway_cls = _GATEWAYS.get(market)
     if gateway_cls is None:  # pragma: no cover - guarded by enum
@@ -60,6 +82,7 @@ def create_gateway(
     gateway = gateway_cls(settings, event_bus=event_bus)  # type: ignore[call-arg]
     _log.info(
         "gateway_created",
+        exchange=exchange,
         market=market.value,
         adapter=gateway_cls.__name__,
         testnet=settings.binance.testnet,

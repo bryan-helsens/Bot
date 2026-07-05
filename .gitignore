@@ -5,6 +5,7 @@
 .env.*
 !.env.example
 !.env.testnet.example
+!.env.bitvavo.example
 *.key
 *.pem
 secrets/
