@@ -79,6 +79,11 @@ class TradingEngine(LoggerMixin):
         # same second can't each pass the max-open/exposure check against a stale
         # count and all open at once (the event bus runs candle handlers concurrently).
         self._entry_lock = asyncio.Lock()
+        # Deposit auto-sync: baseline of the exchange quote balance + the bot cash
+        # at that moment. An unexplained wallet delta vs this model = an external
+        # deposit/withdrawal, folded into capital (NOT profit) via adjust_capital.
+        self._wallet_baseline: Decimal | None = None
+        self._baseline_cash: Decimal | None = None
         self._last_candle_at: datetime | None = None
         self._last_trade_at: datetime | None = None
         self._snapshot_task: asyncio.Task[None] | None = None
@@ -129,6 +134,7 @@ class TradingEngine(LoggerMixin):
         self._bus.subscribe(EventType.TRADE_OPENED, self._on_trade_event)
         self._bus.subscribe(EventType.TRADE_CLOSED, self._on_trade_event)
         self._running = True
+        await self._capture_wallet_baseline()
         self._snapshot_task = asyncio.create_task(self._snapshot_loop(), name="equity-snapshots")
         # Consume the authenticated user-data stream so exchange-side fills (notably
         # a resting protective stop firing mid-candle) are reflected immediately.
@@ -296,6 +302,82 @@ class TradingEngine(LoggerMixin):
         self._save_state()
         verb = "Deposited" if amount >= 0 else "Withdrew"
         return {"ok": True, "detail": f"{verb} {abs(amount)} — equity now {equity:.2f}"}
+
+    # ------------------------------------------------------------------ deposit auto-sync
+
+    def _deposit_sync_enabled(self) -> bool:
+        """Auto-sync runs only where a REAL exchange wallet exists (live spot)."""
+        from quantbot.engine.paper_broker import PaperTradingBroker
+
+        return (
+            self._settings.auto_sync_deposits
+            and self._gateway.market is MarketType.SPOT
+            and not isinstance(self._gateway, PaperTradingBroker)
+        )
+
+    async def _quote_wallet_total(self) -> Decimal | None:
+        try:
+            balance = await self._gateway.get_balance(self._settings.quote_asset)
+            return balance.free + balance.locked
+        except Exception as exc:  # noqa: BLE001 - wallet polling is best-effort
+            self.log.warning("wallet_poll_failed", error=str(exc))
+            return None
+
+    def _committed_notional(self) -> Decimal:
+        """Quote currently converted into held base assets (at entry prices)."""
+        return sum(
+            (p.entry_price * p.quantity for p in self._portfolio.positions.all_open()),
+            Decimal("0"),
+        )
+
+    async def _capture_wallet_baseline(self) -> None:
+        if not self._deposit_sync_enabled():
+            return
+        total = await self._quote_wallet_total()
+        if total is not None:
+            self._wallet_baseline = total
+            self._baseline_cash = self._portfolio.cash
+            self.log.info("wallet_baseline_captured", wallet=float(total))
+
+    async def _check_external_transfers(self) -> None:
+        """Detect a deposit/withdrawal on the exchange and fold it into capital.
+
+        Model: wallet_quote ≈ baseline + (cash − baseline_cash) − committed.
+        Trading flows are all accounted for in that model (buys move quote into
+        committed; realised PnL moves cash), so a deviation beyond the noise
+        threshold can only be an external transfer. The threshold (max of 1 quote
+        unit / 2% of equity) absorbs fee-accounting noise (~0.1% of turnover).
+        Deposits made while the bot is OFF are not auto-detected — use the
+        dashboard's Capital button for those.
+        """
+        if not self._deposit_sync_enabled() or self._wallet_baseline is None:
+            return
+        total = await self._quote_wallet_total()
+        if total is None:
+            return
+        expected = (
+            self._wallet_baseline
+            + (self._portfolio.cash - (self._baseline_cash or Decimal("0")))
+            - self._committed_notional()
+        )
+        diff = total - expected
+        equity = self._portfolio.equity()
+        threshold = max(Decimal("1"), equity * Decimal("0.02"))
+        if abs(diff) < threshold:
+            return
+        result = self.adjust_capital(diff)
+        if result["ok"]:
+            self.log.info(
+                "external_transfer_synced",
+                kind="deposit" if diff > 0 else "withdrawal",
+                amount=float(diff), equity=float(self._portfolio.equity()),
+            )
+            # Re-anchor the model on the new reality so this fires exactly once.
+            self._wallet_baseline = total
+            self._baseline_cash = self._portfolio.cash
+        else:
+            self.log.warning("external_transfer_sync_failed", amount=float(diff),
+                             detail=result["detail"])
 
     async def _on_trade_event(self, event: Event) -> None:
         self._last_trade_at = utcnow()
@@ -780,9 +862,13 @@ class TradingEngine(LoggerMixin):
     # ------------------------------------------------------------------ snapshots
 
     async def _snapshot_loop(self) -> None:
+        tick = 0
         while self._running:
             try:
                 await asyncio.sleep(60)
+                tick += 1
+                if tick % 5 == 0:  # every ~5 min: fold external deposits into capital
+                    await self._check_external_transfers()
                 equity = self._portfolio.equity()
                 self._risk.update_equity(equity)
                 snap = self._portfolio.snapshot()

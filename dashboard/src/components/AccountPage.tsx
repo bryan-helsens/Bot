@@ -116,8 +116,10 @@ export function AccountPage() {
         </div>
         {msg && <div className={msg.ok ? "note ok" : "note err"}>{msg.text}</div>}
         <p className="hint">
-          Use this AFTER you actually add/remove funds on the exchange. It moves the bot's
-          capital baseline — it is <b>NOT</b> counted as profit, so your return% stays honest.
+          Deposits/withdrawals on the exchange are <b>detected automatically</b> while the
+          bot runs (checked every ~5 min) and folded into its capital — <b>NOT</b> counted
+          as profit, so your return% stays honest. Use these buttons only for transfers
+          made while the bot was <b>offline</b> (those can't be auto-detected).
         </p>
       </div>
 

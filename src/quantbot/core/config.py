@@ -354,6 +354,9 @@ class Settings(BaseSettings):
 
     #: Which exchange adapter to trade through: "binance" or "bitvavo".
     exchange: str = "binance"
+    #: Auto-detect exchange deposits/withdrawals of the quote asset while running
+    #: and fold them into the bot's capital WITHOUT counting them as profit.
+    auto_sync_deposits: bool = True
 
     symbols: CsvStrList = Field(default_factory=lambda: ["BTCUSDT"])
     timeframes: CsvTimeframeList = Field(default_factory=lambda: [Timeframe.H1])
