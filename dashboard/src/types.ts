@@ -71,6 +71,7 @@ export interface Config {
   symbols: string[];
   timeframes: string[];
   min_consensus: number;
+  quote_asset: string;
 }
 
 export interface Portfolio {

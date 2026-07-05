@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api/client";
+import { setQuote } from "./format";
 import { AccountPage } from "./components/AccountPage";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { Allocation } from "./components/Allocation";
@@ -79,6 +80,11 @@ export function App() {
 function Dashboard() {
   const { lastMessage, connected } = useWebSocket();
   const [page, setPage] = useState<Page>("overview");
+
+  useEffect(() => {
+    // Label every amount with the ACTUAL quote asset (USDT, USDC, EUR, ...).
+    api.config().then((c) => setQuote(c.quote_asset)).catch(() => undefined);
+  }, []);
   const { data: portfolio, refresh: refreshPortfolio } = usePolling<Portfolio>(
     () => api.portfolio(),
     5000,

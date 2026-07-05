@@ -190,7 +190,13 @@ Beveiliging aanzetten (vóór echt geld of publieke toegang): zet
 3. **1-2 weken testnet paper-live** — vergelijk de live `Profitability Report`
    met de backtest. Komt de live profit factor in de buurt (>1)? Dan overleefde
    de edge de echte slippage.
-4. **Pas dán** echt geld, en **klein** beginnen. Vereist:
+4. ⚠️ **EU/MiCA:** als Belgische gebruiker kun je op Binance **geen USDT meer kopen
+   of ernaar converteren** (Tether is niet MiCA-compliant; "sell only" sinds 2025).
+   Voor echt geld gebruik je daarom **USDC-paren**: zet in `.env`
+   `QUOTE_ASSET=USDC` en `SYMBOLS=BTCUSDC,ETHUSDC,...`. Het dashboard en de
+   rapporten volgen automatisch het geconfigureerde quote-asset. (De testnet-run
+   blijft gewoon op USDT — daar geldt MiCA niet.)
+5. **Pas dán** echt geld, en **klein** beginnen. Vereist:
    - `BINANCE__TESTNET=false` + echte mainnet-keys (Reading + Spot Trading,
      **nooit** withdrawals, met IP-whitelist),
    - `ALLOW_LIVE_REAL_ORDERS=true`,

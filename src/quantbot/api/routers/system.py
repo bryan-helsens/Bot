@@ -296,6 +296,7 @@ async def system_config(state: StateDep, _: AuthDep) -> ConfigSchema:
         symbols=state.settings.symbols,
         timeframes=[tf.value for tf in state.settings.timeframes],
         min_consensus=state.settings.aggregator.min_consensus,
+        quote_asset=state.settings.quote_asset,
     )
 
 

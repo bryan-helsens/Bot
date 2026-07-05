@@ -1,8 +1,10 @@
+import { QUOTE } from "../format";
 import type { Portfolio, Position } from "../types";
 
 /**
  * Clear money breakdown: how much is in free cash vs. held in each coin (valued at
- * the current mark price), plus the total. Values are in the quote currency (USDT).
+ * the current mark price), plus the total. Values are in the configured quote
+ * currency (USDT/USDC/EUR).
  */
 export function Balances({
   portfolio,
@@ -29,7 +31,7 @@ export function Balances({
 
   return (
     <div className="panel">
-      <h2>Balances (USDT)</h2>
+      <h2>Balances ({QUOTE})</h2>
       <table>
         <thead>
           <tr>
@@ -72,7 +74,7 @@ export function Balances({
         </tbody>
       </table>
       <p className="hint">
-        Values are in USDT (the quote currency). "(±x)" next to a coin is its
+        Values are in {QUOTE} (the quote currency). "(±x)" next to a coin is its
         unrealised PnL.
       </p>
     </div>

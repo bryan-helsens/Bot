@@ -223,6 +223,7 @@ class ConfigSchema(BaseModel):
     symbols: list[str]
     timeframes: list[str]
     min_consensus: int
+    quote_asset: str = "USDT"
 
 
 class MessageResponse(BaseModel):

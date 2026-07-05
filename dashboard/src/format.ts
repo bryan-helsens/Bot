@@ -1,10 +1,16 @@
 // Central formatting helpers so every monetary amount reads unambiguously as
 // money (with its unit) and percentages/prices look consistent across the app.
 //
-// NOTE: the bot trades USDT pairs, so amounts are in USDT (≈ USD), NOT euro.
-// Labelling them explicitly avoids the "is this € or $?" confusion.
+// The unit follows the configured QUOTE_ASSET (USDT, USDC, EUR, ...): the App
+// fetches it from /system/config on load and calls setQuote(). Labelling every
+// amount explicitly avoids the "is this € or $?" confusion.
 
-export const QUOTE = "USDT";
+export let QUOTE = "USDT";
+
+/** Set the display currency to the bot's configured quote asset. */
+export function setQuote(quote: string): void {
+  if (quote) QUOTE = quote;
+}
 
 function toNum(value: string | number | null | undefined): number {
   if (value === null || value === undefined) return NaN;

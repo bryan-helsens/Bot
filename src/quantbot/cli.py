@@ -398,12 +398,12 @@ async def _run_replay(days: int, timeframe: str, limit: int, start: str) -> None
         f"{start_dt.date()} → {end_dt.date()} … (fetching history)"
     )
     result = await run_replay(settings, symbols=symbols, timeframe=tf, start=start_dt, end=end_dt)
-    _print_replay(result)
+    _print_replay(result, quote=settings.quote_asset)
 
 
-def _print_replay(r: dict) -> None:
+def _print_replay(r: dict, quote: str = "USDT") -> None:
     def usdt(v: float) -> str:
-        return f"{v:+,.2f} USDT" if v else "0.00 USDT"
+        return f"{v:+,.2f} {quote}" if v else f"0.00 {quote}"
 
     head = Table(title="Backtest (replay of your live config)")
     head.add_column("Metric")
@@ -421,7 +421,7 @@ def _print_replay(r: dict) -> None:
     head.add_row("Win rate", f"{r['win_rate'] * 100:.1f}%")
     head.add_row("Profit factor", f"{pf:.2f}  ({'edge' if pf > 1 else 'no edge'})")
     head.add_row("Expectancy / trade", usdt(r["expectancy"]))
-    head.add_row("Fees", f"{r['fees']:.2f} USDT")
+    head.add_row("Fees", f"{r['fees']:.2f} {quote}")
     fpg = r["fees_pct_of_gross"]
     head.add_row("Fees % of gross profit", "—" if fpg is None else f"{fpg:.1f}%")
     head.add_row("Max drawdown", f"{r['max_drawdown_pct']:.2f}%")
@@ -551,7 +551,7 @@ async def _run_sweep(days: int, timeframe: str, limit: int, start: str = "") -> 
     bench = rows[0][1]["benchmark_pct"]
     console.print(
         f"[dim]Buy & hold {rows[0][1]['benchmark_symbol']}: "
-        f"{'—' if bench is None else f'{bench:+.2f}%'} · amounts in USDT[/]"
+        f"{'—' if bench is None else f'{bench:+.2f}%'} · amounts in {settings.quote_asset}[/]"
     )
     best = rows[0]
     if best[1]["profit_factor"] <= 1 or best[1]["net_pnl"] <= 0:
