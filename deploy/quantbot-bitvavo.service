@@ -1,0 +1,39 @@
+# Second QuantBot instance: Bitvavo PAPER trading, running ALONGSIDE the main
+# Binance-testnet instance. Uses its own checkout, .env (EXCHANGE=bitvavo,
+# API__PORT=8001, own STATE_FILE) so the two bots never touch each other.
+#
+# Install:
+#   git clone https://github.com/bryan-helsens/Bot.git ~/Bot-bitvavo
+#   cd ~/Bot-bitvavo && git checkout claude/binance-trading-bot-build-bBmx6
+#   python3 -m venv .venv && .venv/bin/pip install -e ".[api]"
+#   cp .env.bitvavo.example .env      # fill in Bitvavo keys + set API__PORT=8001
+#   cp config/strategies.paper.example.yaml config/strategies.yaml
+#   cd dashboard && npm install && npm run build && cd ..
+#   sudo cp deploy/quantbot-bitvavo.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now quantbot-bitvavo
+#
+# Dashboard: ssh -L 8001:localhost:8001 debian@SERVER  ->  http://localhost:8001
+
+[Unit]
+Description=QuantBot (Bitvavo paper) engine + dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# --- EDIT THESE to match your machine ---
+User=debian
+WorkingDirectory=/home/debian/Bot-bitvavo
+ExecStart=/home/debian/Bot-bitvavo/.venv/bin/quantbot serve
+# ----------------------------------------
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=quantbot-bitvavo
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
